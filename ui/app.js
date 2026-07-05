@@ -301,12 +301,48 @@ async function findRoutes(ev) {
 function renderRoutes(hops) {
   const results = $("route-results");
   results.innerHTML = "";
+  if (!hops.length) return;
+
+  // Route-wide totals for the summary bar.
+  let totalProfit = 0, totalDist = 0, totalTons = 0, firstOutlay = 0;
+  hops.forEach((h, i) => {
+    totalProfit += h.profit || 0;
+    totalDist += h.distance || 0;
+    for (const c of h.commodities || []) {
+      totalTons += c.amount || 0;
+      if (i === 0) firstOutlay += (c.amount || 0) * (c.buy_price || 0);
+    }
+  });
+  const summary = document.createElement("div");
+  summary.className = "route-summary";
+  summary.innerHTML =
+    `<span class="profit">+${fmtNum(totalProfit)} cr total</span>` +
+    `<span>${hops.length} hop${hops.length > 1 ? "s" : ""}</span>` +
+    `<span>${totalDist.toFixed(1)} ly</span>` +
+    `<span>${fmtNum(totalTons)} t moved</span>` +
+    (totalTons ? `<span>${fmtNum(totalProfit / totalTons)} cr/t avg</span>` : "") +
+    (firstOutlay ? `<span>needs ~${fmtNum(firstOutlay)} cr up front</span>` : "");
+  results.appendChild(summary);
+
   for (const h of hops) {
     const div = document.createElement("div");
     div.className = "hop";
-    const commodities = (h.commodities || [])
-      .map((c) => `<b>${esc(c.name)}</b> ×${c.amount ?? "?"} (buy ${fmtNum(c.buy_price)}, sell ${fmtNum(c.sell_price)})`)
-      .join(" · ");
+    const tons = (h.commodities || []).reduce((a, c) => a + (c.amount || 0), 0);
+    const outlay = (h.commodities || []).reduce((a, c) => a + (c.amount || 0) * (c.buy_price || 0), 0);
+
+    const rows = (h.commodities || []).map((c) => {
+      const unit = (c.sell_price != null && c.buy_price != null) ? c.sell_price - c.buy_price : null;
+      const line = c.profit != null ? c.profit : (unit != null && c.amount != null ? unit * c.amount : null);
+      return `<tr>` +
+        `<td>${esc(c.name)}</td>` +
+        `<td class="num">${fmtNum(c.amount)}</td>` +
+        `<td class="num">${fmtNum(c.buy_price)}</td>` +
+        `<td class="num">${fmtNum(c.sell_price)}</td>` +
+        `<td class="num">${unit != null ? "+" + fmtNum(unit) : "?"}</td>` +
+        `<td class="num profit-cell">+${fmtNum(line)}</td>` +
+        `</tr>`;
+    }).join("");
+
     div.innerHTML =
       `<div class="route-line">` +
       `<b>${esc(h.from_station)}</b><span class="dim">${esc(h.from_system)}</span>` +
@@ -314,10 +350,17 @@ function renderRoutes(hops) {
       `<b>${esc(h.to_station)}</b><span class="dim">${esc(h.to_system)}</span>` +
       `<span class="profit">+${fmtNum(h.profit)} cr</span>` +
       `</div>` +
-      (commodities ? `<div class="commodities">${commodities}</div>` : "") +
-      (h.distance != null ? `<div class="commodities">${Number(h.distance).toFixed(1)} ly jump` +
-        (h.to_dist_ls != null ? ` · ${fmtNum(h.to_dist_ls)} ls to station` : "") +
-        (h.cumulative_profit != null ? ` · total so far: ${fmtNum(h.cumulative_profit)} cr` : "") + `</div>` : "");
+      (rows ? `<table class="hop-table">` +
+        `<thead><tr><th>Commodity</th><th class="num">Units</th><th class="num">Buy</th>` +
+        `<th class="num">Sell</th><th class="num">cr/unit</th><th class="num">Total</th></tr></thead>` +
+        `<tbody>${rows}</tbody></table>` : "") +
+      `<div class="commodities">` +
+      (h.distance != null ? `${Number(h.distance).toFixed(1)} ly jump` : "") +
+      (h.to_dist_ls != null ? ` · ${fmtNum(h.to_dist_ls)} ls to station` : "") +
+      (tons ? ` · ${fmtNum(h.profit / tons)} cr/t` : "") +
+      (outlay ? ` · costs ${fmtNum(outlay)} cr to load` : "") +
+      (h.cumulative_profit != null ? ` · total so far: ${fmtNum(h.cumulative_profit)} cr` : "") +
+      `</div>`;
     if (h.to_system) {
       const line = div.querySelector(".route-line");
       line.insertBefore(plotButton(h.to_system), line.querySelector(".profit"));
