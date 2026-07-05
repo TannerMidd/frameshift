@@ -22,8 +22,16 @@ networks** so other machines can connect.
 - **Current location** — system and station, updated ~2s after in-game events, with
   copy-to-clipboard buttons.
 - **Status** — credits, fuel, cargo tonnage and legal state from `Status.json`.
-- **Trade routes** — "Find routes" asks the Spansh trade planner API, pre-filled with
-  your ship's cargo capacity, jump range and balance.
+- **Trade routes** — "Find routes" computes multi-hop profit loops pre-filled with
+  your ship's cargo capacity, jump range and balance. Two engines:
+  - **Local (recommended)** — click *Build Database* on the Market Database panel
+    once: the app downloads the Spansh galaxy dump (~3.9 GB, deleted after import;
+    ~1-2 GB kept as SQLite in `data/`) and then keeps prices fresh in real time via
+    the community **EDDN** feed — the same open data network Inara/Spansh/EDSM
+    themselves are built on. Routes are then computed on your machine, no third
+    party needed. Fleet carriers are excluded.
+  - **Spansh API** — used automatically until the local DB is built, or on demand
+    via the Source selector.
 - **Quick links** — Inara trade routes/commodities/system and EDSM, pre-filled with
   your current system; opens in your default browser.
 - **Station market** — sortable/filterable commodity table (populated when you open a

@@ -72,6 +72,7 @@ class AppState:
                 "max_jump_range": self.max_jump_range,
                 "fuel_capacity": self.fuel_capacity,
                 "system": self.system,
+                "star_pos": self.star_pos,
                 "body": self.body,
                 "docked": self.docked,
                 "station": self.station,

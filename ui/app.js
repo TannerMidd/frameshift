@@ -286,9 +286,10 @@ async function findRoutes(ev) {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || "Route request failed");
     renderRoutes(data.hops || []);
+    const src = data.source === "local" ? "local database" : "Spansh API (local DB not built yet)";
     status.textContent = data.hops && data.hops.length
-      ? `Route found (${data.hops.length} hop${data.hops.length > 1 ? "s" : ""}) from ${state.system}.`
-      : "Spansh returned no profitable route for those settings.";
+      ? `Route found (${data.hops.length} hop${data.hops.length > 1 ? "s" : ""}) from ${state.system} via ${src}.`
+      : `No profitable route for those settings (via ${src}).`;
   } catch (err) {
     status.classList.add("error");
     status.textContent = String(err.message || err);
@@ -327,6 +328,149 @@ function renderRoutes(hops) {
 
 function fmtNum(n) {
   return n == null ? "?" : Math.round(n).toLocaleString();
+}
+
+/* ---------- commodity search ---------- */
+
+async function loadCommodityList() {
+  try {
+    const resp = await fetch("/api/commodities");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const dl = $("commodity-list");
+    dl.innerHTML = "";
+    for (const c of data.commodities || []) {
+      const opt = document.createElement("option");
+      opt.value = c.name;
+      dl.appendChild(opt);
+    }
+    if (!dl.children.length) setTimeout(loadCommodityList, 30000); // DB not seeded yet
+  } catch (e) { setTimeout(loadCommodityList, 30000); }
+}
+
+function ageText(epoch) {
+  if (!epoch) return "?";
+  const mins = Math.max(0, (Date.now() / 1000 - epoch) / 60);
+  if (mins < 60) return Math.round(mins) + "m";
+  if (mins < 48 * 60) return Math.round(mins / 60) + "h";
+  return Math.round(mins / 1440) + "d";
+}
+
+async function searchCommodity(ev) {
+  ev.preventDefault();
+  const status = $("cs-status");
+  const table = $("cs-table");
+  const tbody = table.querySelector("tbody");
+  const mode = $("cs-mode").value;
+  status.classList.remove("error");
+  status.textContent = "Searching…";
+  try {
+    const params = new URLSearchParams({
+      q: $("cs-query").value.trim(),
+      mode,
+      radius: $("cs-radius").value || "50",
+      min_units: $("cs-min").value || "1",
+      large_pad: $("cs-largepad").checked ? "1" : "0",
+    });
+    const resp = await fetch("/api/commodity-search?" + params);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Search failed");
+    tbody.innerHTML = "";
+    for (const r of data.results || []) {
+      const tr = document.createElement("tr");
+      const price = mode === "buy" ? r.buy_price : r.sell_price;
+      const units = mode === "buy" ? r.supply : r.demand;
+      tr.innerHTML =
+        `<td>${esc(r.station)}${r.large_pad ? "" : ' <span class="sub">no L pad</span>'}</td>` +
+        `<td>${esc(r.system)}</td>` +
+        `<td class="num orange">${fmtNum(price)}</td>` +
+        `<td class="num">${fmtNum(units)}</td>` +
+        `<td class="num">${r.distance} ly</td>` +
+        `<td class="num">${r.dist_ls != null ? fmtNum(r.dist_ls) + " ls" : "?"}</td>` +
+        `<td class="num">${ageText(r.updated_at)}</td>`;
+      const td = document.createElement("td");
+      td.appendChild(plotButton(r.system));
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    table.classList.toggle("hidden", !(data.results || []).length);
+    status.textContent = (data.results || []).length
+      ? `${data.results.length} station(s) ${mode === "buy" ? "selling" : "buying"} ${data.commodity} within ${$("cs-radius").value} ly.`
+      : `Nothing ${mode === "buy" ? "selling" : "buying"} ${data.commodity || "that"} nearby with those filters.`;
+  } catch (err) {
+    table.classList.add("hidden");
+    status.classList.add("error");
+    status.textContent = String(err.message || err);
+  }
+}
+
+/* ---------- market database panel ---------- */
+
+async function seedDb() {
+  if (!confirm("Download ~3.9 GB from spansh.co.uk and build the local market database?\n(Takes a while; the app stays usable meanwhile.)")) return;
+  try {
+    const resp = await fetch("/api/marketdb/seed", { method: "POST" });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Could not start build");
+  } catch (err) {
+    $("db-status").textContent = String(err.message || err);
+  }
+  pollDbStatus();
+}
+
+async function pollDbStatus() {
+  let delay = 5000;
+  try {
+    const resp = await fetch("/api/marketdb/status", { cache: "no-store" });
+    if (resp.ok) {
+      const s = await resp.json();
+      renderDbStatus(s);
+      if (s.seeding && (s.seeding.phase === "downloading" || s.seeding.phase === "importing")) delay = 1500;
+    }
+  } catch (e) { /* retry next tick */ }
+  setTimeout(pollDbStatus, delay);
+}
+
+function renderDbStatus(s) {
+  const el = $("db-status");
+  const bar = $("seed-bar");
+  const fill = $("seed-fill");
+  const btn = $("seed-btn");
+  const seeding = s.seeding || {};
+
+  if (seeding.phase === "downloading") {
+    btn.disabled = true;
+    bar.classList.remove("hidden");
+    const pct = seeding.total_mb ? Math.round(100 * seeding.downloaded_mb / seeding.total_mb) : 0;
+    fill.style.width = pct + "%";
+    el.textContent = `Downloading dump… ${seeding.downloaded_mb} / ${seeding.total_mb} MB (${pct}%)`;
+    return;
+  }
+  if (seeding.phase === "importing") {
+    btn.disabled = true;
+    bar.classList.remove("hidden");
+    fill.style.width = "100%";
+    el.textContent = `Importing… ${(seeding.systems_done || 0).toLocaleString()} systems, ${(seeding.stations_done || 0).toLocaleString()} station markets so far`;
+    return;
+  }
+  btn.disabled = false;
+  bar.classList.add("hidden");
+  if (seeding.phase === "error") {
+    el.textContent = "Build failed: " + seeding.error;
+    return;
+  }
+  if (!s.ready) {
+    el.textContent = "Not built yet — routes fall back to the Spansh API. Click Build to enable the local engine.";
+    return;
+  }
+  btn.textContent = "REBUILD DATABASE";
+  const eddn = s.eddn || {};
+  const eddnTxt = eddn.connected
+    ? `EDDN live (${(eddn.markets_updated || 0).toLocaleString()} markets updated this session)`
+    : "EDDN reconnecting…";
+  el.textContent =
+    `${(s.stations || 0).toLocaleString()} stations · ${(s.commodity_rows || 0).toLocaleString()} price rows · ` +
+    `${s.db_size_mb} MB · seeded ${s.seeded_at || "?"} · ${eddnTxt}`;
 }
 
 /* ---------- wiring ---------- */
@@ -375,6 +519,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
   $("market-filter").addEventListener("input", renderMarket);
+  $("seed-btn").addEventListener("click", seedDb);
+  $("cs-form").addEventListener("submit", searchCommodity);
 
   poll();
+  pollDbStatus();
+  loadCommodityList();
 });

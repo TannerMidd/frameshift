@@ -52,6 +52,10 @@ def main():
     state = AppState()
     JournalWatcher(state).start()
 
+    from elite.eddn import LISTENER
+
+    LISTENER.start()  # keeps the local market DB fresh; no-ops until it's seeded
+
     server = ServerThread(state, port=args.port)
     server.start()
 

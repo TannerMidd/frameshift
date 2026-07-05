@@ -47,17 +47,7 @@
 
   <section class="card">
     <div class="card-head">
-      <div class="label">QUICK LINKS <span class="dim">(pre-filled with your current system)</span></div>
-      <label class="inapp-toggle hidden" id="inapp-toggle-wrap" title="Show Inara/EDSM results in a window inside the app instead of your browser">
-        <input type="checkbox" id="inapp-toggle"> open in app
-      </label>
-    </div>
-    <div class="linkrow" id="links"></div>
-  </section>
-
-  <section class="card">
-    <div class="card-head">
-      <div class="label">TRADE ROUTES <span class="dim">via Spansh</span></div>
+      <div class="label">TRADE ROUTES <span class="dim">computed locally · live EDDN prices</span></div>
     </div>
     <form id="route-form" class="route-form">
       <label>Capital <input type="number" id="rf-capital" min="1000" step="1000"></label>
@@ -71,6 +61,47 @@
     </form>
     <div id="route-status" class="dim"></div>
     <div id="route-results"></div>
+  </section>
+
+  <section class="card">
+    <div class="label">COMMODITY SEARCH <span class="dim">local database · where to buy or sell near you</span></div>
+    <form id="cs-form" class="route-form">
+      <label>Commodity
+        <input type="text" id="cs-query" list="commodity-list" placeholder="e.g. Gold" autocomplete="off">
+        <datalist id="commodity-list"></datalist>
+      </label>
+      <label>I want to
+        <select id="cs-mode">
+          <option value="sell">Sell (best price)</option>
+          <option value="buy">Buy (cheapest)</option>
+        </select>
+      </label>
+      <label>Radius (ly) <input type="number" id="cs-radius" min="1" value="50"></label>
+      <label>Min units <input type="number" id="cs-min" min="1" value="100"></label>
+      <label class="check"><input type="checkbox" id="cs-largepad"> Large pad</label>
+      <button type="submit" id="cs-go" class="primary">SEARCH</button>
+    </form>
+    <div id="cs-status" class="dim"></div>
+    <div class="table-wrap">
+      <table id="cs-table" class="hidden">
+        <thead>
+          <tr>
+            <th>Station</th><th>System</th><th class="num">Price</th><th class="num">Units</th>
+            <th class="num">Jump</th><th class="num">Star dist</th><th class="num">Updated</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div class="label">MARKET DATABASE <span class="dim">local trade data · seeded from Spansh dump · live-updated by EDDN</span></div>
+      <button id="seed-btn" class="primary small">BUILD DATABASE (~3.9 GB download)</button>
+    </div>
+    <div id="db-status" class="dim">Checking…</div>
+    <div class="seedbar hidden" id="seed-bar"><div id="seed-fill"></div></div>
   </section>
 
   <div class="two-col">
@@ -107,7 +138,16 @@
   </div>
 </main>
 
-<footer class="dim">Elite Trader · journal data refreshes every ~2s · routes by <span class="orange">spansh.co.uk</span> · links to inara.cz &amp; edsm.net</footer>
+<footer>
+  <div class="footer-row">
+    <span class="dim">External lookups:</span>
+    <div class="linkrow footer-links" id="links"></div>
+    <label class="inapp-toggle hidden" id="inapp-toggle-wrap" title="Show Inara/EDSM results in a window inside the app instead of your browser">
+      <input type="checkbox" id="inapp-toggle"> open in app
+    </label>
+  </div>
+  <div class="dim">Elite Trader · journal refreshes every ~2s · trade data: community EDDN feed + Spansh galaxy dump</div>
+</footer>
 
 <script src="app.js"></script>
 </body>

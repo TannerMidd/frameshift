@@ -116,6 +116,15 @@ main {
 /* trade route form */
 .route-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin: 8px 0; }
 .route-form label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--dim); letter-spacing: 1px; }
+.route-form input[type="text"] {
+  width: 180px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-size: 14px;
+}
 .route-form input[type="number"] {
   width: 105px;
   background: var(--panel-2);
@@ -127,6 +136,26 @@ main {
 }
 .route-form input:focus { outline: none; border-color: var(--orange); }
 .route-form .check { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 8px; font-size: 13px; }
+.route-form select {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-size: 14px;
+}
+.route-form select:focus { outline: none; border-color: var(--orange); }
+
+/* market db seed progress */
+.seedbar {
+  height: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+#seed-fill { height: 100%; width: 0; background: var(--orange); transition: width .5s; }
 
 button.primary {
   background: var(--orange);
@@ -141,8 +170,8 @@ button.primary {
 button.primary:hover { background: var(--orange-soft); }
 button.primary:disabled { background: var(--border); color: var(--dim); cursor: wait; }
 
-#route-status, #plot-status { min-height: 18px; font-size: 13px; margin-bottom: 4px; }
-#route-status.error, #plot-status.error { color: var(--bad); }
+#route-status, #plot-status, #cs-status { min-height: 18px; font-size: 13px; margin-bottom: 4px; }
+#route-status.error, #plot-status.error, #cs-status.error { color: var(--bad); }
 
 /* autoplot */
 .plot-form { display: flex; gap: 8px; margin-top: 10px; }
@@ -247,4 +276,12 @@ footer {
   text-align: center;
   padding: 12px;
   font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
 }
+.footer-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.footer-links { margin: 0; }
+.footer-links a { padding: 3px 10px; font-size: 11.5px; color: var(--dim); }
+.footer-links a:hover { color: var(--orange); }
