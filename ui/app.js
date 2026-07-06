@@ -83,9 +83,10 @@ async function plotSystem(system) {
 
 /* ---------- flight panel mode ---------- */
 
+const PANEL_PAGES = ["status", "trade", "commodities", "bio", "guides", "analytics", "local", "database"];
+
 function setPanelMode(on) {
   document.body.classList.toggle("panel-mode", on);
-  $("flight-panel").classList.toggle("hidden", !on);
   localStorage.setItem("panelMode", on ? "1" : "0");
   try {
     if (on && document.documentElement.requestFullscreen) {
@@ -94,7 +95,54 @@ function setPanelMode(on) {
       document.exitFullscreen();
     }
   } catch (e) { /* fullscreen is a nicety, not a requirement */ }
-  if (on && state) renderPanel();
+  if (on) {
+    setPanelPage(localStorage.getItem("panelPage") || "status");
+  } else {
+    $("flight-panel").classList.add("hidden");
+  }
+}
+
+function setPanelPage(name) {
+  if (!PANEL_PAGES.includes(name)) name = "status";
+  localStorage.setItem("panelPage", name);
+  const statusPage = name === "status";
+  $("flight-panel").classList.toggle("hidden", !statusPage);
+  document.body.classList.toggle("fp-status-page", statusPage);
+  if (!statusPage) activateTab(name);
+  document.querySelectorAll("#fp-nav button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.page === name));
+  if (statusPage && state) renderPanel();
+  window.scrollTo(0, 0);
+}
+
+function panelSwipe(dx) {
+  const current = localStorage.getItem("panelPage") || "status";
+  const idx = PANEL_PAGES.indexOf(current);
+  const next = PANEL_PAGES[(idx + (dx < 0 ? 1 : PANEL_PAGES.length - 1)) % PANEL_PAGES.length];
+  setPanelPage(next);
+}
+
+function initPanelNav() {
+  document.querySelectorAll("#fp-nav button").forEach((b) =>
+    b.addEventListener("click", () => {
+      if (b.dataset.page === "__exit") setPanelMode(false);
+      else setPanelPage(b.dataset.page);
+    }));
+  // Swipe left/right anywhere (except inside horizontally scrollable tables)
+  let touchX = null, touchY = null;
+  document.addEventListener("touchstart", (ev) => {
+    if (!document.body.classList.contains("panel-mode")) return;
+    if (ev.target.closest(".table-wrap")) { touchX = null; return; }
+    touchX = ev.touches[0].clientX;
+    touchY = ev.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener("touchend", (ev) => {
+    if (touchX === null || !document.body.classList.contains("panel-mode")) return;
+    const dx = ev.changedTouches[0].clientX - touchX;
+    const dy = ev.changedTouches[0].clientY - touchY;
+    touchX = null;
+    if (Math.abs(dx) > 70 && Math.abs(dy) < 60) panelSwipe(dx);
+  }, { passive: true });
 }
 
 function renderPanel() {
@@ -1256,18 +1304,20 @@ async function poll() {
   setTimeout(poll, 1500);
 }
 
+function activateTab(name) {
+  document.querySelectorAll("#tabs .tab").forEach((b) =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tabpane").forEach((p) =>
+    p.classList.toggle("hidden", p.id !== "tab-" + name));
+  localStorage.setItem("activeTab", name);
+  if (name === "analytics") loadAnalytics();
+}
+
 function initTabs() {
-  const buttons = document.querySelectorAll("#tabs .tab");
-  const activate = (name) => {
-    buttons.forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-    document.querySelectorAll(".tabpane").forEach((p) =>
-      p.classList.toggle("hidden", p.id !== "tab-" + name));
-    localStorage.setItem("activeTab", name);
-    if (name === "analytics") loadAnalytics();
-  };
-  buttons.forEach((b) => b.addEventListener("click", () => activate(b.dataset.tab)));
+  document.querySelectorAll("#tabs .tab").forEach((b) =>
+    b.addEventListener("click", () => activateTab(b.dataset.tab)));
   const saved = localStorage.getItem("activeTab");
-  if (saved && document.getElementById("tab-" + saved)) activate(saved);
+  if (saved && document.getElementById("tab-" + saved)) activateTab(saved);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1321,6 +1371,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Flight panel mode (tablet as a cockpit display)
+  initPanelNav();
   $("panel-toggle").addEventListener("click", () => setPanelMode(true));
   $("panel-exit").addEventListener("click", () => setPanelMode(false));
   $("fp-plot-form").addEventListener("submit", (ev) => {

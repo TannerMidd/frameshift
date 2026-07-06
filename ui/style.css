@@ -384,13 +384,62 @@ footer {
 
 /* ---------- flight panel mode (tablet cockpit display) ---------- */
 body.panel-mode .topbar,
-body.panel-mode main,
-body.panel-mode footer { display: none; }
+body.panel-mode footer,
+body.panel-mode .tabs { display: none; }
+body.panel-mode.fp-status-page main { display: none; }
 body.panel-mode { background: #060708; }
+
+/* Bottom touch nav: every standard tab is reachable in panel mode */
+#fp-nav { display: none; }
+body.panel-mode #fp-nav {
+  display: flex;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: #0b0c0e;
+  border-top: 2px solid var(--orange);
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+  gap: 4px;
+}
+#fp-nav button {
+  flex: 1;
+  min-height: 58px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--dim);
+  font-size: clamp(10px, 1.7vw, 14px);
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+#fp-nav button.active { color: var(--orange); border-color: var(--orange); background: var(--panel-2); }
+#fp-nav button:active { background: var(--panel-2); }
+
+/* Touch-friendly scaling for the standard tabs while in panel mode */
+body.panel-mode main {
+  padding-bottom: 96px;
+  max-width: none;
+  font-size: 16px;
+}
+body.panel-mode button.primary { min-height: 54px; font-size: 15px; padding: 12px 22px; }
+body.panel-mode .route-form input,
+body.panel-mode .route-form select,
+body.panel-mode .plot-form input,
+body.panel-mode #market-filter { min-height: 48px; font-size: 16px; }
+body.panel-mode .copy,
+body.panel-mode .plotbtn { min-width: 46px; min-height: 46px; font-size: 17px; }
+body.panel-mode th, body.panel-mode td { padding: 10px 10px; font-size: 15px; }
+body.panel-mode .linkrow a { padding: 12px 18px; font-size: 14px; }
+body.panel-mode .jumps li, body.panel-mode .cargo-list li { padding: 11px 4px; font-size: 15px; }
 
 #flight-panel {
   min-height: 100vh;
   padding: clamp(12px, 3vw, 32px);
+  padding-bottom: 96px;
   display: flex;
   flex-direction: column;
   gap: clamp(8px, 1.6vh, 18px);

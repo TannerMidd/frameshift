@@ -105,8 +105,11 @@ you're carrying with their estimated Vista Genomics payout. First footfall pays
 Tap **◈ PANEL** and the whole UI transforms into a touch-first, Elite-themed
 cockpit display for a tablet mounted at your flight station: glowing system
 readout, fuel and cargo gauges, credits/legal/exploration tiles, recent jumps as
-big tap-to-replot buttons and a one-line route plotter. Goes fullscreen where
-the browser allows; remembers the mode per device.
+big tap-to-replot buttons and a one-line route plotter. **Everything from the
+standard mode is still there** — a fixed bottom touch bar (or swiping left/right)
+moves between Status, Trade, Market, Explore, Guides, Stats, Local and Database
+pages, all rescaled for fingers. Goes fullscreen where the browser allows;
+remembers the mode and page per device.
 
 <div align="center"><img src="docs/screenshots/flight-panel.png" alt="Flight panel mode on a tablet" width="700"></div>
 
