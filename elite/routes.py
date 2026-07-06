@@ -20,6 +20,23 @@ LOOP_STATION_CAP = 900       # nearest stations considered in loop mode
 LOOP_FLOW_LIMIT = 30000      # top commodity flows pulled from SQL
 LOOP_FLOWS_PER_PAIR = 12
 LOOP_RESULTS = 8
+LOOP_CANDIDATES = 250        # loops kept for time-weighted ranking
+
+# Travel-time model for profit/hour (rough but consistent across candidates).
+JUMP_TIME_S = 50.0           # one hyperspace jump incl. align/scoop average
+DOCK_OVERHEAD_S = 180.0      # request dock, land, trade, launch
+SC_BASE_S = 60.0             # drop from jump + initial acceleration
+UNKNOWN_DIST_LS = 500.0      # assumed when a station's star distance is unknown
+
+
+def _supercruise_time_s(dist_ls):
+    ls = dist_ls if dist_ls and dist_ls > 0 else UNKNOWN_DIST_LS
+    return SC_BASE_S + 170.0 * (ls / 1000.0) ** 0.35
+
+
+def _leg_time_s(distance_ly, dest_dist_ls, jump_range):
+    jumps = math.ceil(distance_ly / max(1.0, jump_range)) if distance_ly > 0.01 else 0
+    return jumps * JUMP_TIME_S + _supercruise_time_s(dest_dist_ls) + DOCK_OVERHEAD_S
 
 
 class RouteError(Exception):
@@ -161,13 +178,15 @@ def _extend(conn, route, max_hop, max_cargo, filters):
     return extensions[:DESTS_PER_HOP]
 
 
-def _fill_cargo(flows, max_cargo, capital):
+def _fill_cargo(flows, max_cargo, capital, min_supply=1):
     """Greedy fill by unit profit; flows are pre-sorted by the SQL query."""
     space, funds = max_cargo, capital
     load = []
     for symbol, buy, sell, supply, demand in flows:
         if space <= 0 or funds < buy:
             break
+        if supply < min_supply:
+            continue
         if any(c["symbol"] == symbol for c in load):
             continue
         units = min(space, supply, demand, funds // buy)
@@ -175,7 +194,7 @@ def _fill_cargo(flows, max_cargo, capital):
             continue
         load.append(
             {"symbol": symbol, "amount": units, "buy_price": buy, "sell_price": sell,
-             "profit": units * (sell - buy)}
+             "profit": units * (sell - buy), "supply": supply, "demand": demand}
         )
         space -= units
         funds -= units * buy

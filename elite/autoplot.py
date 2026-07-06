@@ -17,16 +17,17 @@ ED_WINDOW_TITLE = "Elite - Dangerous (CLIENT)"
 GUI_FOCUS_NONE = 0
 GUI_FOCUS_GALAXY_MAP = 6
 
-NEEDED_ACTIONS = ["GalaxyMapOpen", "UI_Up", "UI_Right", "UI_Select"]
+NEEDED_ACTIONS = ["GalaxyMapOpen", "UI_Up", "UI_Right", "UI_Select", "UI_Back"]
 
 # Timing (seconds) - tweak here if the sequence outruns the game on your PC.
 MAP_LOAD_DELAY = 3.0        # galaxy map opening animation
 SEARCH_READY_DELAY = 1.0    # search box entering edit mode after selecting it
 AFTER_SEARCH_DELAY = 4.0    # camera flying to the searched system
 STEP_DELAY = 0.4            # small pause between UI keypresses
-PLOT_HOLD = 0.9             # holding UI_Select on a system = "plot route"
+PLOT_HOLD = 1.5             # holding UI_Select on a system = "plot route"
 MAP_OPEN_TIMEOUT = 12.0
 CLEAR_BACKSPACES = 40       # wipe leftover text in the search box before typing
+PLOT_CONFIRM_WAIT = 3.0     # time for NavRoute.json to appear after the hold
 
 # Characters that need shift on a US layout (rare in system names).
 SHIFTED = {"+": "=", "_": "-", ":": ";", '"': "'", "?": "/", "!": "1", "*": "8", "(": "9", ")": "0"}
@@ -53,6 +54,23 @@ def gui_focus():
         return json.loads(text).get("GuiFocus")
     except (OSError, ValueError):
         return None
+
+
+def _navroute_mtime():
+    try:
+        return (find_journal_dir() / "NavRoute.json").stat().st_mtime
+    except OSError:
+        return 0
+
+
+def _route_plotted_since(baseline, timeout=PLOT_CONFIRM_WAIT):
+    """The game rewrites NavRoute.json the moment a route is plotted."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _navroute_mtime() > baseline:
+            return True
+        time.sleep(0.3)
+    return False
 
 
 def find_ed_window():
@@ -128,8 +146,8 @@ def plot_route(system, dry_run=False, close_map=True):
         f"focus search box ({_desc(binds['UI_Up'])} then {_desc(binds['UI_Select'])})",
         f"clear search box ({CLEAR_BACKSPACES}x backspace)",
         f"type '{system}' + enter",
-        f"select result ({_desc(binds['UI_Right'])})",
-        f"hold {_desc(binds['UI_Select'])} {PLOT_HOLD}s to plot",
+        f"exit search box ({_desc(binds['UI_Back'])})",
+        f"hold {_desc(binds['UI_Select'])} {PLOT_HOLD}s to plot (verified via NavRoute.json, retries with fallbacks)",
     ]
     if close_map:
         steps.append("close galaxy map")
@@ -164,11 +182,27 @@ def plot_route(system, dry_run=False, close_map=True):
         pdi.press("enter")
         time.sleep(AFTER_SEARCH_DELAY)  # camera flies to the system
 
-        _press(pdi, binds["UI_Right"]["key"], binds["UI_Right"]["mods"])
-        time.sleep(STEP_DELAY)
-        _press(pdi, binds["UI_Select"]["key"], binds["UI_Select"]["mods"], hold=PLOT_HOLD)
-        time.sleep(0.6)
+        # After Enter the search box is still in edit mode - keys would be typed
+        # as text, not act as UI commands. Back out first, then hold select to
+        # plot; NavRoute.json updating is the proof it worked. Try harder exits
+        # if the first attempt doesn't take.
+        baseline = _navroute_mtime()
+        plotted = False
+        for attempt_keys in (("UI_Back",), ("UI_Right",), ("UI_Back",)):
+            for action in attempt_keys:
+                _press(pdi, binds[action]["key"], binds[action]["mods"])
+                time.sleep(STEP_DELAY)
+            _press(pdi, binds["UI_Select"]["key"], binds["UI_Select"]["mods"], hold=PLOT_HOLD)
+            if _route_plotted_since(baseline):
+                plotted = True
+                break
 
+        if not plotted:
+            raise AutoplotError(
+                f"Searched and targeted '{system}' but the plot-route hold never registered "
+                "(no NavRoute update). The map was left open so you can plot manually. "
+                "Note: plotting to the system you are already in always fails."
+            )
         if close_map:
             _press(pdi, binds["GalaxyMapOpen"]["key"], binds["GalaxyMapOpen"]["mods"])
         return steps
