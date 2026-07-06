@@ -97,8 +97,15 @@ def _press(pdi, key, mods=(), hold=0.0):
     for m in mods:
         pdi.keyDown(m)
     if hold:
+        # Elite Dangerous polls input DEVICE STATE, so a single synthetic
+        # keydown held only by a sleep lapses and registers as a tap - the
+        # hold-to-plot bar never fills. Re-assert the keydown continuously
+        # until release so the game sees the key genuinely held down.
+        end = time.monotonic() + hold
         pdi.keyDown(key)
-        time.sleep(hold)
+        while time.monotonic() < end:
+            pdi.keyDown(key)
+            time.sleep(0.02)
         pdi.keyUp(key)
     else:
         pdi.press(key)
@@ -199,11 +206,11 @@ def plot_route(system, dry_run=False, close_map=True):
             pdi.press("enter")
             time.sleep(AFTER_SEARCH_DELAY)  # camera flies to the system
 
-            # Enter releases the search box focus by itself. The proven
-            # sequence (same as EDAutopilot's) is UI_Right onto the panel's
-            # plot control, then hold select. UI_Back must NOT come first -
-            # it collapses the search panel and breaks every later attempt.
-            for attempt_keys in (("UI_Right",), (), ("UI_Back", "UI_Right")):
+            # After search the system is selected with the "hold to plot"
+            # prompt already focused, so the first attempt is a bare hold with
+            # no navigation to move focus off it; later attempts nudge focus
+            # in case the prompt wasn't where expected.
+            for attempt_keys in ((), ("UI_Right",), ("UI_Back", "UI_Right")):
                 for action in attempt_keys:
                     _press(pdi, binds[action]["key"], binds[action]["mods"])
                     time.sleep(STEP_DELAY)
