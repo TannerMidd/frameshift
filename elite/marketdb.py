@@ -7,12 +7,22 @@ MarketID), commodities by lowercase symbol (matches EDDN commodity names)."""
 import os
 import re
 import sqlite3
+import sys
 import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-DATA_DIR = Path(os.environ.get("ET_DATA_DIR") or Path(__file__).resolve().parent.parent / "data")
+
+def _default_data_dir():
+    if getattr(sys, "frozen", False):
+        # PyInstaller bundle: keep the database next to the exe, not in the
+        # temp extraction dir that vanishes on exit.
+        return Path(sys.executable).resolve().parent / "data"
+    return Path(__file__).resolve().parent.parent / "data"
+
+
+DATA_DIR = Path(os.environ.get("ET_DATA_DIR") or _default_data_dir())
 DB_PATH = DATA_DIR / "market.db"
 
 CARRIER_TYPES = {"Drake-Class Carrier", "Fleet Carrier"}

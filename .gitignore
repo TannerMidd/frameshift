@@ -14,3 +14,8 @@ Thumbs.db
 
 # Local market database + Spansh dump (multi-GB, machine-local)
 data/
+
+# PyInstaller build output
+build/
+dist/
+*.spec
