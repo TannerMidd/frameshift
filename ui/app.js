@@ -729,6 +729,148 @@ async function findCargoSell() {
   }
 }
 
+/* ---------- analytics ---------- */
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function svgEl(tag, attrs, parent) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  if (parent) parent.appendChild(el);
+  return el;
+}
+
+function chartTip() {
+  let tip = document.getElementById("chart-tip");
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.id = "chart-tip";
+    tip.className = "chart-tip hidden";
+    document.body.appendChild(tip);
+  }
+  return tip;
+}
+
+function shortCr(n) {
+  const a = Math.abs(n);
+  if (a >= 1e9) return (n / 1e9).toFixed(1) + "B";
+  if (a >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (a >= 1e3) return (n / 1e3).toFixed(0) + "k";
+  return String(Math.round(n));
+}
+
+function drawBalanceChart(svg, points) {
+  svg.innerHTML = "";
+  if (points.length < 2) return;
+  const W = svg.clientWidth || 900, H = 220, padL = 56, padR = 70, padY = 18;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const ts = points.map((p) => p.ts), vs = points.map((p) => p.balance);
+  const t0 = Math.min(...ts), t1 = Math.max(...ts);
+  const v0 = Math.min(...vs), v1 = Math.max(...vs);
+  const vpad = (v1 - v0) * 0.08 || v1 * 0.05 || 1;
+  const x = (t) => padL + ((t - t0) / Math.max(1, t1 - t0)) * (W - padL - padR);
+  const y = (v) => H - padY - ((v - (v0 - vpad)) / ((v1 + vpad) - (v0 - vpad))) * (H - 2 * padY);
+
+  for (let i = 0; i <= 2; i++) {  // recessive grid: 3 lines
+    const v = v0 + ((v1 - v0) * i) / 2;
+    svgEl("line", { x1: padL, x2: W - padR, y1: y(v), y2: y(v), stroke: "var(--border)", "stroke-width": 1 }, svg);
+    svgEl("text", { x: padL - 8, y: y(v) + 4, "text-anchor": "end", fill: "var(--dim)", "font-size": 11 }, svg)
+      .textContent = shortCr(v);
+  }
+  const d = points.map((p, i) => `${i ? "L" : "M"}${x(p.ts).toFixed(1)},${y(p.balance).toFixed(1)}`).join("");
+  svgEl("path", { d, fill: "none", stroke: "#ff7100", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+  const last = points[points.length - 1];
+  svgEl("circle", { cx: x(last.ts), cy: y(last.balance), r: 3.5, fill: "#ff7100" }, svg);
+  svgEl("text", { x: x(last.ts) + 8, y: y(last.balance) + 4, fill: "var(--text)", "font-size": 12, "font-weight": 600 }, svg)
+    .textContent = shortCr(last.balance);
+  for (const t of [t0, t1]) {
+    svgEl("text", { x: x(t), y: H - 2, "text-anchor": t === t0 ? "start" : "end", fill: "var(--dim)", "font-size": 11 }, svg)
+      .textContent = new Date(t * 1000).toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+  // crosshair + tooltip
+  const cross = svgEl("line", { y1: padY, y2: H - padY, stroke: "var(--dim)", "stroke-width": 1, opacity: 0 }, svg);
+  const tip = chartTip();
+  svg.addEventListener("mousemove", (ev) => {
+    const rect = svg.getBoundingClientRect();
+    const mx = ((ev.clientX - rect.left) / rect.width) * W;
+    let best = points[0], bd = Infinity;
+    for (const p of points) { const dd = Math.abs(x(p.ts) - mx); if (dd < bd) { bd = dd; best = p; } }
+    cross.setAttribute("x1", x(best.ts)); cross.setAttribute("x2", x(best.ts));
+    cross.setAttribute("opacity", 0.5);
+    tip.classList.remove("hidden");
+    tip.textContent = `${new Date(best.ts * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} · ${fmtNum(best.balance)} cr`;
+    tip.style.left = (ev.pageX + 14) + "px";
+    tip.style.top = (ev.pageY - 10) + "px";
+  });
+  svg.addEventListener("mouseleave", () => { cross.setAttribute("opacity", 0); tip.classList.add("hidden"); });
+}
+
+function drawDailyChart(svg, days) {
+  svg.innerHTML = "";
+  if (!days.length) return;
+  const W = svg.clientWidth || 900, H = 200, padL = 56, padR = 16, padY = 16, gap = 2;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const vals = days.map((d) => d.profit);
+  const vmax = Math.max(0, ...vals), vmin = Math.min(0, ...vals);
+  const span = (vmax - vmin) || 1;
+  const y = (v) => padY + ((vmax - v) / span) * (H - 2 * padY - 14);
+  const bw = Math.max(3, (W - padL - padR) / days.length - gap);
+  svgEl("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: "var(--border)", "stroke-width": 1 }, svg);
+  svgEl("text", { x: padL - 8, y: y(vmax) + 4, "text-anchor": "end", fill: "var(--dim)", "font-size": 11 }, svg)
+    .textContent = shortCr(vmax);
+  const tip = chartTip();
+  const maxIdx = vals.indexOf(Math.max(...vals));
+  days.forEach((d, i) => {
+    const vx = padL + i * ((W - padL - padR) / days.length) + gap / 2;
+    const h = Math.max(2, Math.abs(y(d.profit) - y(0)));
+    const ry = d.profit >= 0 ? y(d.profit) : y(0);
+    const bar = svgEl("rect", {
+      x: vx, y: ry, width: bw, height: h, rx: 3,
+      fill: d.profit >= 0 ? "#6fbf73" : "#e05d5d",
+    }, svg);
+    if (i === maxIdx && d.profit > 0) {
+      svgEl("text", { x: vx + bw / 2, y: ry - 4, "text-anchor": "middle", fill: "var(--text)", "font-size": 11, "font-weight": 600 }, svg)
+        .textContent = shortCr(d.profit);
+    }
+    bar.addEventListener("mousemove", (ev) => {
+      tip.classList.remove("hidden");
+      tip.textContent = `${d.date} · ${fmtNum(d.profit)} cr · ${fmtNum(d.tons)} t sold`;
+      tip.style.left = (ev.pageX + 14) + "px";
+      tip.style.top = (ev.pageY - 10) + "px";
+    });
+    bar.addEventListener("mouseleave", () => tip.classList.add("hidden"));
+    if (i === 0 || i === days.length - 1) {
+      svgEl("text", { x: vx + bw / 2, y: H - 2, "text-anchor": "middle", fill: "var(--dim)", "font-size": 10 }, svg)
+        .textContent = d.date.slice(5);
+    }
+  });
+}
+
+async function loadAnalytics() {
+  try {
+    const resp = await fetch("/api/analytics?days=" + $("an-days").value, { cache: "no-store" });
+    if (!resp.ok) return;
+    const a = await resp.json();
+    $("an-today").textContent = "+" + fmtNum(a.today.profit) + " cr";
+    $("an-week").textContent = "+" + fmtNum(a.week.profit) + " cr";
+    $("an-period").textContent = "+" + fmtNum(a.period.profit) + " cr";
+    $("an-tons").textContent = fmtNum(a.period.tons) + " t";
+    drawBalanceChart($("an-balance"), a.balance || []);
+    drawDailyChart($("an-daily"), a.daily || []);
+    const top = a.top || [];
+    $("an-empty").classList.toggle("hidden", top.length > 0);
+    $("an-top").classList.toggle("hidden", top.length === 0);
+    const tbody = $("an-top").querySelector("tbody");
+    tbody.innerHTML = "";
+    for (const t of top) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${esc(t.name || t.symbol)}</td><td class="num">${fmtNum(t.tons)}</td>` +
+        `<td class="num profit-cell">+${fmtNum(t.profit)}</td>`;
+      tbody.appendChild(tr);
+    }
+  } catch (e) { /* retry on next open */ }
+}
+
 /* ---------- market database panel ---------- */
 
 async function seedDb() {
@@ -793,9 +935,13 @@ function renderDbStatus(s) {
   const eddnTxt = eddn.connected
     ? `EDDN live (${(eddn.markets_updated || 0).toLocaleString()} markets updated this session)`
     : "EDDN reconnecting…";
+  const up = s.eddn_upload || {};
+  const upTxt = up.enabled
+    ? ` · contributing back: ${up.uploads || 0} market${up.uploads === 1 ? "" : "s"} uploaded${up.last_error ? " (last attempt failed)" : ""}`
+    : " · uploading disabled";
   el.textContent =
     `${(s.stations || 0).toLocaleString()} stations · ${(s.commodity_rows || 0).toLocaleString()} price rows · ` +
-    `${s.db_size_mb} MB · seeded ${s.seeded_at || "?"} · ${eddnTxt}`;
+    `${s.db_size_mb} MB · seeded ${s.seeded_at || "?"} · ${eddnTxt}${upTxt}`;
 }
 
 /* ---------- wiring ---------- */
@@ -818,6 +964,7 @@ function initTabs() {
     document.querySelectorAll(".tabpane").forEach((p) =>
       p.classList.toggle("hidden", p.id !== "tab-" + name));
     localStorage.setItem("activeTab", name);
+    if (name === "analytics") loadAnalytics();
   };
   buttons.forEach((b) => b.addEventListener("click", () => activate(b.dataset.tab)));
   const saved = localStorage.getItem("activeTab");
@@ -897,6 +1044,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("cargo-sell-btn").addEventListener("click", findCargoSell);
   $("rr-form").addEventListener("submit", planRiches);
   $("nr-form").addEventListener("submit", planNeutron);
+  $("an-days").addEventListener("change", loadAnalytics);
 
   poll();
   pollDbStatus();

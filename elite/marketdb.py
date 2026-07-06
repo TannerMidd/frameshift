@@ -57,7 +57,47 @@ CREATE TABLE IF NOT EXISTS commodity_names(
     symbol TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     category TEXT);
+CREATE TABLE IF NOT EXISTS trade_log(
+    ts INTEGER NOT NULL,
+    event TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    name TEXT,
+    count INTEGER NOT NULL DEFAULT 0,
+    price INTEGER NOT NULL DEFAULT 0,
+    total INTEGER NOT NULL DEFAULT 0,
+    profit INTEGER,
+    PRIMARY KEY(ts, event, symbol, total)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS balance_log(
+    ts INTEGER PRIMARY KEY,
+    balance INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS imported_journals(filename TEXT PRIMARY KEY);
 """
+
+
+def log_trade(ts, event, symbol, name, count, price, total, profit=None):
+    if not ts or not symbol:
+        return
+    conn = connect()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO trade_log(ts, event, symbol, name, count, price, total, profit)"
+            " VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+            (ts, event, symbol, name, count or 0, price or 0, total or 0, profit),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def log_balance(ts, balance):
+    if not ts or balance is None:
+        return
+    conn = connect()
+    try:
+        conn.execute("INSERT OR REPLACE INTO balance_log(ts, balance) VALUES(?, ?)", (ts, balance))
+        conn.commit()
+    finally:
+        conn.close()
 
 _init_lock = threading.Lock()
 _initialized = False

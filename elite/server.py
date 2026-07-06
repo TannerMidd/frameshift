@@ -211,6 +211,60 @@ def create_app(state):
             return jsonify({"error": str(exc)}), 400
         return jsonify({"results": results})
 
+    @app.get("/api/analytics")
+    def api_analytics():
+        try:
+            days = max(1, min(365, int(request.args.get("days", 30))))
+        except ValueError:
+            days = 30
+        now = marketdb.now_epoch()
+        since = now - days * 86400
+        conn = marketdb.connect()
+        try:
+            balance = conn.execute(
+                "SELECT ts, balance FROM balance_log WHERE ts >= ? ORDER BY ts", (since,)
+            ).fetchall()
+            if len(balance) > 400:  # downsample, keep first/last
+                step = len(balance) // 400 + 1
+                balance = balance[::step] + [balance[-1]]
+            daily = conn.execute(
+                """SELECT date(ts, 'unixepoch') AS d,
+                          SUM(CASE WHEN event = 'sell' THEN COALESCE(profit, 0) ELSE 0 END),
+                          SUM(CASE WHEN event = 'sell' THEN count ELSE 0 END)
+                   FROM trade_log WHERE ts >= ? GROUP BY d ORDER BY d""",
+                (since,),
+            ).fetchall()
+
+            def profit_since(cutoff):
+                row = conn.execute(
+                    "SELECT SUM(COALESCE(profit, 0)), SUM(count), COUNT(*) FROM trade_log"
+                    " WHERE event = 'sell' AND ts >= ?", (cutoff,)
+                ).fetchone()
+                return {"profit": row[0] or 0, "tons": row[1] or 0, "sales": row[2] or 0}
+
+            top = conn.execute(
+                """SELECT symbol, name, SUM(COALESCE(profit, 0)) AS p, SUM(count) AS c
+                   FROM trade_log WHERE event = 'sell' AND ts >= ?
+                   GROUP BY symbol ORDER BY p DESC LIMIT 8""",
+                (since,),
+            ).fetchall()
+            day_start = now - (now % 86400)
+            today = profit_since(day_start)
+            week = profit_since(now - 7 * 86400)
+            period = profit_since(since)
+        finally:
+            conn.close()
+        resp = jsonify({
+            "balance": [{"ts": t, "balance": b} for t, b in balance],
+            "daily": [{"date": d, "profit": p or 0, "tons": t or 0} for d, p, t in daily],
+            "today": today,
+            "week": week,
+            "period": period,
+            "top": [{"symbol": s, "name": n, "profit": p or 0, "tons": c or 0} for s, n, p, c in top],
+        })
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
     @app.get("/api/marketdb/status")
     def api_marketdb_status():
         conn = marketdb.connect()
@@ -218,8 +272,11 @@ def create_app(state):
             info = marketdb.status(conn)
         finally:
             conn.close()
+        from .eddn_upload import UPLOADER
+
         info["seeding"] = SEEDER.progress()
         info["eddn"] = LISTENER.stats()
+        info["eddn_upload"] = UPLOADER.stats()
         resp = jsonify(info)
         resp.headers["Cache-Control"] = "no-store"
         return resp

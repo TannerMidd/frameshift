@@ -7,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import biovalues
+from . import biovalues, marketdb
 
 BIO_SIGNAL_TYPE = "$SAA_SignalType_Biological;"
 
@@ -69,6 +69,8 @@ class JournalWatcher:
         self._partial = ""
         self._status_mtimes = {}
         self._body_scans = {}  # body name -> details, current system only
+        self._live = False  # False during bootstrap replay, True while tailing
+        self._last_logged_balance = None
 
     # ---------- event handling ----------
 
@@ -95,6 +97,7 @@ class JournalWatcher:
             updates["fuel_capacity"] = e.get("FuelCapacity")
         if e.get("Credits") is not None:
             updates["credits"] = e.get("Credits")
+            self._log_balance_point(marketdb.parse_update_time(e.get("timestamp")), e.get("Credits"))
         self.state.update(**{k: v for k, v in updates.items() if v is not None})
 
     def _on_loadout(self, e):
@@ -248,6 +251,37 @@ class JournalWatcher:
             })
             self.state.update(bio_vault=vault, bio_sampling=None)
 
+    # ---------- trade & balance logging (analytics) ----------
+
+    def _on_marketbuy(self, e):
+        try:
+            marketdb.log_trade(
+                marketdb.parse_update_time(e.get("timestamp")), "buy",
+                (e.get("Type") or "").lower(), e.get("Type_Localised") or (e.get("Type") or "").title(),
+                e.get("Count"), e.get("BuyPrice"), e.get("TotalCost"),
+            )
+        except Exception:
+            pass
+
+    def _on_marketsell(self, e):
+        try:
+            profit = None
+            if e.get("SellPrice") is not None and e.get("AvgPricePaid") is not None:
+                profit = (e["SellPrice"] - e["AvgPricePaid"]) * (e.get("Count") or 0)
+            marketdb.log_trade(
+                marketdb.parse_update_time(e.get("timestamp")), "sell",
+                (e.get("Type") or "").lower(), e.get("Type_Localised") or (e.get("Type") or "").title(),
+                e.get("Count"), e.get("SellPrice"), e.get("TotalSale"), profit,
+            )
+        except Exception:
+            pass
+
+    def _log_balance_point(self, ts, balance):
+        try:
+            marketdb.log_balance(ts, balance)
+        except Exception:
+            pass
+
     def _on_sellorganicdata(self, e):
         self.state.update(bio_vault=[], bio_sampling=None)
 
@@ -292,8 +326,16 @@ class JournalWatcher:
             "cargo_tons": data.get("Cargo"),
             "legal_state": data.get("LegalState"),
         }
-        if data.get("Balance") is not None:
-            updates["credits"] = data.get("Balance")
+        balance = data.get("Balance")
+        if balance is not None:
+            updates["credits"] = balance
+            # Sample the live balance curve on meaningful changes only.
+            if self._live and (
+                self._last_logged_balance is None
+                or abs(balance - self._last_logged_balance) >= 50000
+            ):
+                self._last_logged_balance = balance
+                self._log_balance_point(marketdb.now_epoch(), balance)
         dest = data.get("Destination") or {}
         updates["destination"] = dest.get("Name") or None
         self.state.update(**updates)
@@ -311,6 +353,12 @@ class JournalWatcher:
         self.state.update(cargo_inventory=inventory)
 
     def _apply_market(self, data):
+        try:
+            from .eddn_upload import UPLOADER
+
+            UPLOADER.maybe_publish(data, self.state.commander)
+        except Exception:
+            pass  # uploading is best-effort; never break market parsing
         items = []
         for item in data.get("Items", []):
             stock = item.get("Stock", 0)
@@ -434,8 +482,54 @@ class JournalWatcher:
         if text:
             self._process_lines(text)
 
+    def import_trade_history(self):
+        """One-time sweep of ALL journal files for trade/balance events, so
+        analytics start with full history instead of just recent sessions."""
+        if not self.journal_dir.is_dir():
+            return
+        conn = marketdb.connect()
+        try:
+            done = {r[0] for r in conn.execute("SELECT filename FROM imported_journals")}
+        finally:
+            conn.close()
+        files = journal_files(self.journal_dir)
+        markers = ('"event":"MarketBuy"', '"event":"MarketSell"', '"event":"LoadGame"')
+        for path in files[:-1]:  # the newest file is still being written; tail covers it
+            if path.name in done:
+                continue
+            try:
+                for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                    if not any(m in line for m in markers):
+                        continue
+                    try:
+                        event = json.loads(line.strip().rstrip(","))
+                    except json.JSONDecodeError:
+                        continue
+                    etype = event.get("event")
+                    if etype == "MarketBuy":
+                        self._on_marketbuy(event)
+                    elif etype == "MarketSell":
+                        self._on_marketsell(event)
+                    elif etype == "LoadGame" and event.get("Credits") is not None:
+                        self._log_balance_point(
+                            marketdb.parse_update_time(event.get("timestamp")), event["Credits"]
+                        )
+            except OSError:
+                continue
+            conn = marketdb.connect()
+            try:
+                conn.execute("INSERT OR IGNORE INTO imported_journals(filename) VALUES(?)", (path.name,))
+                conn.commit()
+            finally:
+                conn.close()
+
     def run_forever(self):
         self.bootstrap()
+        try:
+            self.import_trade_history()
+        except Exception:
+            pass
+        self._live = True
         while True:
             try:
                 self._poll_journal()

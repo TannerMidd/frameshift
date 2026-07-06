@@ -50,6 +50,7 @@
     <button class="tab" data-tab="commodities">COMMODITIES</button>
     <button class="tab" data-tab="bio">BIO</button>
     <button class="tab" data-tab="guides">GUIDES</button>
+    <button class="tab" data-tab="analytics">ANALYTICS</button>
     <button class="tab" data-tab="local">LOCAL</button>
     <button class="tab" data-tab="database">DATABASE</button>
   </nav>
@@ -180,6 +181,44 @@
           <thead><tr><th>#</th><th>Waypoint</th><th class="num">Jump (ly)</th><th class="num">Remaining (ly)</th><th class="num">Jumps</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="tabpane hidden" id="tab-analytics">
+    <section class="card">
+      <div class="card-head">
+        <div class="label">TRADING PERFORMANCE <span class="dim">from your journal history · sell profit = sale − average paid</span></div>
+        <select id="an-days">
+          <option value="7">7 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+          <option value="365">1 year</option>
+        </select>
+      </div>
+      <div class="stats an-tiles">
+        <div class="stat"><div class="label">PROFIT TODAY</div><div class="value" id="an-today">—</div></div>
+        <div class="stat"><div class="label">PROFIT 7 DAYS</div><div class="value" id="an-week">—</div></div>
+        <div class="stat"><div class="label">PROFIT PERIOD</div><div class="value" id="an-period">—</div></div>
+        <div class="stat"><div class="label">TONS SOLD</div><div class="value" id="an-tons">—</div></div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="label">CREDIT BALANCE OVER TIME</div>
+      <div class="chart-wrap"><svg id="an-balance" width="100%" height="220"></svg></div>
+    </section>
+    <section class="card">
+      <div class="label">DAILY TRADING PROFIT</div>
+      <div class="chart-wrap"><svg id="an-daily" width="100%" height="200"></svg></div>
+    </section>
+    <section class="card">
+      <div class="label">TOP COMMODITIES BY PROFIT</div>
+      <div class="table-wrap">
+        <table id="an-top" class="hidden">
+          <thead><tr><th>Commodity</th><th class="num">Tons sold</th><th class="num">Profit</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div id="an-empty" class="dim empty">No trades recorded yet — buy and sell something and this fills in.</div>
       </div>
     </section>
   </div>

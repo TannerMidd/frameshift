@@ -320,6 +320,32 @@ td .sub { color: var(--dim); font-size: 11px; }
 .cargo-list .count { margin-left: auto; color: var(--orange-soft); font-variant-numeric: tabular-nums; }
 .cargo-label { margin-top: 16px; }
 
+/* analytics */
+.an-tiles { justify-content: space-between; }
+.an-tiles .value { color: var(--good); }
+.chart-wrap { width: 100%; overflow: hidden; }
+.chart-wrap svg { display: block; width: 100%; }
+.chart-tip {
+  position: absolute;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 9px;
+  pointer-events: none;
+  z-index: 20;
+  white-space: nowrap;
+}
+#an-days {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 5px 9px;
+  font-size: 13px;
+}
+
 footer {
   text-align: center;
   padding: 12px;
