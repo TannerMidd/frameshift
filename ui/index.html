@@ -109,13 +109,36 @@
       </form>
       <div id="cs-status" class="dim"></div>
       <div class="table-wrap">
-        <table id="cs-table" class="hidden">
+        <table id="cs-table" class="hidden"><!-- commodity results -->
           <thead>
             <tr>
               <th>Station</th><th>System</th><th class="num">Price</th><th class="num">Units</th>
               <th class="num">Jump</th><th class="num">Star dist</th><th class="num">Updated</th><th></th>
             </tr>
           </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">OUTFITTING &amp; SHIPYARDS <span class="dim">nearest stations selling a module or ship · via Spansh</span></div>
+      <form id="os-form" class="route-form">
+        <label>Search for
+          <input type="text" id="os-query" placeholder="e.g. 6A Fuel Scoop / Python" autocomplete="off">
+        </label>
+        <label>Type
+          <select id="os-type">
+            <option value="module">Module</option>
+            <option value="ship">Ship</option>
+          </select>
+        </label>
+        <button type="submit" id="os-go" class="primary">SEARCH</button>
+      </form>
+      <div id="os-status" class="dim"></div>
+      <div class="table-wrap">
+        <table id="os-table" class="hidden">
+          <thead><tr><th>Station</th><th>System</th><th class="num">Jump</th><th class="num">Star dist</th><th>Pad</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
       </div>

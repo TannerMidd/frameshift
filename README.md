@@ -34,10 +34,37 @@ because relocating is a one-time cost. Search radius, leg length, jump range,
 minimum stock and result count are all configurable and persist between sessions.
 A multi-hop chain mode is included too.
 
-### 🔍 Commodity search
+### 🔔 Live route alerts
+
+WATCH any loop and the app checks every incoming EDDN update against it: if the
+sell price drops, the buy price rises, or demand/stock drains below your load,
+you get an alert (and a browser notification) **before** wasting a trip. Only
+possible because the database is live.
+
+### 🔍 Commodity, outfitting & ship search
 
 Where to buy or sell anything near you — best price first, with distance, units
-available, pad size and price age. One click plots the route in game.
+available, pad size and price age. One click plots the route in game. A
+**"WHERE TO SELL?"** button ranks the best buyers for whatever is in your hold
+right now, and an outfitting/shipyard search finds the nearest station selling
+any module ("6A Fuel Scoop") or ship.
+
+### 🧭 Guides
+
+**Road to Riches** — high-value scan/mapping targets near you in visit order with
+estimated payouts — and a **neutron highway plotter** for long-range travel, each
+waypoint one click from the in-game galaxy map.
+
+### 📈 Profit analytics
+
+Every buy/sell from your entire journal history feeds an analytics tab: profit
+today / this week / this period, credits-over-time curve, daily profit bars and
+your top commodities by profit.
+
+### 🏗️ Colonization helper
+
+Construction depots you've visited show their remaining resource needs, the
+payout for delivering them, and the cheapest nearby sources for each commodity.
 
 <div align="center"><img src="docs/screenshots/commodity-search.png" alt="Commodity search" width="900"></div>
 
@@ -57,14 +84,15 @@ galaxy docks, your database knows the new prices within seconds.
 
 <div align="center"><img src="docs/screenshots/database.png" alt="Market database status" width="900"></div>
 
-### 🧬 Exobiology
+### 🧬 Exploration & exobiology
 
-The **Bio** tab tracks your exobiology run: biological signals on every scanned
-body in the current system (with genus value ranges and the **sample-spacing
-distance** you must travel between the three samples), your live sampling
-progress, and the unsold samples you're carrying with their estimated Vista
-Genomics payout — so you always know how many credits are riding on not
-crashing. First footfall pays 5× on top.
+The **Explore** tab tracks your unsold cartographic data (per-body value
+estimates with first-discovery and mapping bonuses) and your exobiology run:
+biological signals on every scanned body (with genus value ranges, **predicted
+genus candidates** for unmapped bodies from atmosphere/temperature/gravity, and
+the sample-spacing distance), live sampling progress, and the unsold samples
+you're carrying with their estimated Vista Genomics payout. First footfall pays
+5× on top.
 
 ### 🚀 Live ship & local data
 
@@ -127,6 +155,10 @@ Open the **Database** tab and click **Build Database** once:
 1. Downloads Spansh's daily galaxy dump (~4 GB, deleted after import).
 2. Imports every station market into `data/market.db` (~15 minutes).
 3. The EDDN live feed keeps it fresh in real time while the app runs.
+
+The app also **contributes back**: markets you visit are published to EDDN (the
+same way EDMC does), keeping the network alive for everyone. Set
+`ET_EDDN_UPLOAD=0` to opt out.
 
 Until then, trade routes fall back to the Spansh API. Rebuild any time from the
 same button.

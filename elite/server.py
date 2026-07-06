@@ -187,6 +187,23 @@ def create_app(state):
             return jsonify({"error": str(exc)}), 502
         return jsonify(route)
 
+    @app.get("/api/station-search")
+    def api_station_search():
+        snap = state.snapshot()
+        q = (request.args.get("q") or "").strip()
+        kind = request.args.get("type", "module")
+        if not q:
+            return jsonify({"error": "Nothing to search for."}), 400
+        try:
+            results = spansh.station_search(
+                reference_system=request.args.get("system") or snap.get("system"),
+                module=q if kind == "module" else None,
+                ship=q if kind == "ship" else None,
+            )
+        except spansh.SpanshError as exc:
+            return jsonify({"error": str(exc)}), 502
+        return jsonify({"results": results})
+
     @app.get("/api/cargo-sell")
     def api_cargo_sell():
         snap = state.snapshot()

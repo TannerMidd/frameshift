@@ -816,6 +816,49 @@ async function planNeutron(ev) {
   }
 }
 
+/* ---------- outfitting & shipyard search ---------- */
+
+async function searchStations(ev) {
+  ev.preventDefault();
+  const status = $("os-status");
+  const table = $("os-table");
+  const tbody = table.querySelector("tbody");
+  const go = $("os-go");
+  go.disabled = true;
+  status.classList.remove("error");
+  status.textContent = "Searching…";
+  try {
+    const params = new URLSearchParams({ q: $("os-query").value.trim(), type: $("os-type").value });
+    const resp = await fetch("/api/station-search?" + params);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Search failed");
+    const results = data.results || [];
+    status.textContent = results.length
+      ? `${results.length} nearest station(s) with "${$("os-query").value.trim()}":`
+      : "Nothing found — check the spelling (e.g. '6A Fuel Scoop', 'Python Mk II').";
+    tbody.innerHTML = "";
+    for (const r of results) {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        `<td>${esc(r.station)}<div class="sub">${esc(r.type || "")}</div></td>` +
+        `<td>${esc(r.system)}</td>` +
+        `<td class="num">${r.distance} ly</td>` +
+        `<td class="num">${r.dist_ls != null ? fmtNum(Math.round(r.dist_ls)) + " ls" : "?"}</td>` +
+        `<td>${r.large_pad ? "L" : "M/S"}</td>`;
+      const td = document.createElement("td");
+      td.appendChild(plotButton(r.system));
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    table.classList.toggle("hidden", results.length === 0);
+  } catch (err) {
+    status.classList.add("error");
+    status.textContent = String(err.message || err);
+  } finally {
+    go.disabled = false;
+  }
+}
+
 /* ---------- colonization ---------- */
 
 function renderColonisation() {
@@ -1228,6 +1271,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("market-filter").addEventListener("input", renderMarket);
   $("seed-btn").addEventListener("click", seedDb);
   $("cs-form").addEventListener("submit", searchCommodity);
+  $("os-form").addEventListener("submit", searchStations);
   $("cargo-sell-btn").addEventListener("click", findCargoSell);
   $("rr-form").addEventListener("submit", planRiches);
   $("nr-form").addEventListener("submit", planNeutron);

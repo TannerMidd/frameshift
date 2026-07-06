@@ -134,6 +134,57 @@ def riches_route(
     return systems
 
 
+MODULE_RE = None  # compiled lazily
+
+
+def station_search(reference_system, module=None, ship=None, size=20):
+    """Nearest stations selling a module ('6A Fuel Scoop') or a ship."""
+    global MODULE_RE
+    import re
+
+    if MODULE_RE is None:
+        MODULE_RE = re.compile(r"^(\d)\s*([A-EI])\s+(.+)$", re.IGNORECASE)
+    filters = {}
+    if module:
+        m = MODULE_RE.match(module.strip())
+        if m:
+            filters["modules"] = [{"class": [m.group(1)], "rating": [m.group(2).upper()],
+                                   "name": [m.group(3).strip().title()]}]
+        else:
+            filters["modules"] = [{"name": [module.strip().title()]}]
+    elif ship:
+        filters["ships"] = {"value": [ship.strip()]}
+    else:
+        raise SpanshError("Give a module or a ship to search for.")
+
+    body = {
+        "filters": filters,
+        "sort": [{"distance": {"direction": "asc"}}],
+        "size": int(size),
+        "page": 0,
+        "reference_system": reference_system,
+    }
+    try:
+        resp = requests.post(f"{BASE}/stations/search", json=body, headers=HEADERS, timeout=SUBMIT_TIMEOUT)
+    except requests.RequestException as exc:
+        raise SpanshError(f"Could not reach Spansh: {exc}") from exc
+    if resp.status_code >= 400:
+        raise SpanshError(_error_text(resp))
+    results = resp.json().get("results") or []
+    return [
+        {
+            "station": s.get("name"),
+            "system": s.get("system_name"),
+            "distance": round(s.get("distance") or 0, 1),
+            "dist_ls": s.get("distance_to_arrival"),
+            "type": s.get("type"),
+            "large_pad": bool(s.get("has_large_pad")),
+            "updated_at": s.get("outfitting_updated_at") or s.get("shipyard_updated_at") or s.get("updated_at"),
+        }
+        for s in results
+    ]
+
+
 def neutron_route(from_system, to_system, jump_range, efficiency=60):
     """Neutron highway plot: waypoint list for long-distance travel."""
     payload = {

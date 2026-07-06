@@ -196,7 +196,8 @@ button.primary:hover { background: var(--orange-soft); }
 button.primary:disabled { background: var(--border); color: var(--dim); cursor: wait; }
 
 #route-status, #plot-status, #cs-status, #rr-status, #nr-status, #cargo-sell-status { min-height: 18px; font-size: 13px; margin-bottom: 4px; }
-#route-status.error, #plot-status.error, #cs-status.error, #rr-status.error, #nr-status.error, #cargo-sell-status.error { color: var(--bad); }
+#route-status.error, #plot-status.error, #cs-status.error, #rr-status.error, #nr-status.error, #cargo-sell-status.error, #os-status.error { color: var(--bad); }
+#os-status { min-height: 18px; font-size: 13px; margin-bottom: 4px; }
 
 /* autoplot */
 .plot-form { display: flex; gap: 8px; margin-top: 10px; }
