@@ -1,37 +1,66 @@
-# Elite Trader
+<div align="center">
 
-A lightweight companion app for **Elite Dangerous** that reads the game's journal
-files live and turns them into a personal trading platform: it always knows where
-you are, finds the most profitable trade loops near you from its **own local market
-database** (the same open data Inara and Spansh are built on), and can plot a route
-to any system **directly in the in-game galaxy map** with one click.
+# ELITE TRADER
 
-Runs as a desktop app on your gaming PC and simultaneously serves the same UI to
-any phone, tablet or PC on your home network.
+**Your own trade computer for Elite Dangerous.**
 
-## Features
+Reads the game's journal live · builds its own 36-million-price market database from
+the same open data Inara & Spansh use · finds profit-per-hour trade loops · plots
+routes directly in the in-game galaxy map · serves every screen to your phone or
+tablet over your home network.
 
-- **Live status** — current system, station, credits, fuel, cargo; updates ~2 s
-  after anything happens in game. Copy buttons everywhere.
-- **Trade routes (local engine)** — Inara-style 2-station round-trip loops, ranked
-  by **estimated profit per hour** (travel-time model: jumps, supercruise distance,
-  docking overhead), with full per-commodity breakdowns: units, buy/sell price,
-  stock, demand, profit per unit. Loops don't have to start where you are — a
-  better loop several jumps away outranks a mediocre one next door. Search radius,
-  max leg length, jump range, minimum stock/demand and result count are all
-  configurable, and your settings persist. A multi-hop chain mode is also
-  available.
-- **Commodity search** — where to buy or sell any commodity near you, best price
-  first, with distance, supply/demand and price age.
-- **Autoplot** — click the ◎ next to any system and the app opens the in-game
-  galaxy map, types the system into search and plots the route (like EDCopilot).
-  Verified against the game's `NavRoute.json`, so it reports honestly if the plot
-  didn't take.
-- **Station market** — sortable/filterable price table for the station you're
-  docked at.
-- **Jump history & cargo hold** — your recent travels and what you're carrying.
-- **Quick links** — Inara / EDSM / Spansh pages pre-filled with your current
-  system (footer), optionally opened inside the app window.
+![License: MIT](https://img.shields.io/badge/license-MIT-orange)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![Platform: Windows | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
+
+<img src="docs/screenshots/trade-routes.png" alt="Trade route loops ranked by profit per hour" width="900">
+
+</div>
+
+## What it does
+
+### 🔁 Trade loops, ranked by profit per hour
+
+Inara-style two-station round trips computed **on your machine** against live
+prices. Each loop shows cr/hr, cr/trip, minutes per trip, and a full commodity
+breakdown — units, buy/sell, **station stock and demand** (thin stock flagged red),
+and profit per unit. A loop several jumps away outranks a mediocre one next door,
+because relocating is a one-time cost. Search radius, leg length, jump range,
+minimum stock and result count are all configurable and persist between sessions.
+A multi-hop chain mode is included too.
+
+### 🔍 Commodity search
+
+Where to buy or sell anything near you — best price first, with distance, units
+available, pad size and price age. One click plots the route in game.
+
+<div align="center"><img src="docs/screenshots/commodity-search.png" alt="Commodity search" width="900"></div>
+
+### 🎯 Autoplot (Windows)
+
+Click ◎ next to any system anywhere in the app: Elite Trader focuses the game,
+opens the galaxy map with your own keybinds, types the system into search and
+plots the route — then **verifies it actually worked** against the game's
+`NavRoute.json` instead of hoping.
+
+### 📡 A market database that stays fresh
+
+One click downloads Spansh's daily galaxy dump (~4 GB, deleted after import) into
+a ~1.5 GB SQLite database: **474k station markets, 36M prices**. From then on the
+community **EDDN** live feed updates prices in real time — when any player in the
+galaxy docks, your database knows the new prices within seconds.
+
+<div align="center"><img src="docs/screenshots/database.png" alt="Market database status" width="900"></div>
+
+### 🚀 Live ship & local data
+
+Current system, station, credits, fuel, cargo and legal state ~2 s behind the
+game; the docked station's full market table; jump history and cargo hold — plus
+copy buttons everywhere and pre-filled Inara/EDSM/Spansh links in the footer.
+
+<div align="center"><img src="docs/screenshots/local-data.png" alt="Station market and jump history" width="900"></div>
+
+---
 
 ## Quick start (Windows)
 
@@ -48,6 +77,10 @@ The desktop window opens; the LAN URL (e.g. `http://192.168.1.65:8666`) is print
 at startup for other devices. `run.bat --headless` runs the server without a window.
 
 Allow the Windows Firewall prompt on **Private networks** if you want LAN access.
+
+Prefer no Python at all? Grab **`EliteTrader.exe`** from the
+[Releases](../../releases) page, or build it yourself with `build_exe.bat`.
+The exe keeps its database in a `data\` folder next to itself.
 
 ## Quick start (Linux / Steam Deck)
 
@@ -70,53 +103,28 @@ Then open the printed URL in any browser (same machine or LAN). Notes:
   but pywebview needs GTK/WebKit system packages
   (e.g. Debian/Ubuntu: `sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1`).
 - **Autoplot is Windows-only for now** (it injects keystrokes into the game
-  client); the plot buttons report this cleanly on Linux. Everything else — live
-  status, the local trade engine, commodity search, EDDN updates — works fully.
-- The prebuilt exe is Windows-only; on Linux run from source as above.
-
-## Standalone exe
-
-`build_exe.bat` produces `dist\EliteTrader.exe` — a single file that runs without
-Python. It stores its database in a `data\` folder next to the exe. Share the exe
-with friends who don't want to install anything (they still need Elite Dangerous
-and, for the desktop window, Windows 11's built-in WebView2 runtime).
-
-### Releases
-
-Grab `EliteTrader.exe` from the [Releases](../../releases) page — every release
-also includes a source archive automatically.
-
-To cut a release (maintainer): tag and push, and GitHub Actions builds the exe,
-smoke-tests it and publishes the release with the exe attached:
-
-```
-git tag v1.0.0
-git push origin v1.0.0
-```
+  client); the plot buttons report this cleanly on Linux. Everything else works
+  fully.
 
 ## First run: build the market database
 
-The trade engine needs local market data. Open the **Database** tab and click
-**Build Database** once:
+Open the **Database** tab and click **Build Database** once:
 
 1. Downloads Spansh's daily galaxy dump (~4 GB, deleted after import).
-2. Imports every station market into `data/market.db` (~1.5 GB SQLite,
-   ~470k stations, ~36M prices; takes ~15 minutes).
-3. From then on the **EDDN** live feed keeps prices fresh in real time while the
-   app runs — whenever any player in the galaxy docks somewhere, your database
-   learns the new prices within seconds.
+2. Imports every station market into `data/market.db` (~15 minutes).
+3. The EDDN live feed keeps it fresh in real time while the app runs.
 
-Until the database is built, trade routes fall back to the Spansh API. Rebuild
-whenever you like from the same button.
+Until then, trade routes fall back to the Spansh API. Rebuild any time from the
+same button.
 
 ## Autoplot requirements
 
-The plot buttons drive the game with emulated keystrokes, using your own key
-bindings. These game actions need **keyboard** keys bound (controller-only binds
-won't work): *Galaxy Map*, *UI Up*, *UI Right*, *UI Select*, *UI Back*. Leave the
-game window alone for ~10 seconds while a plot runs. Timing constants live at the
-top of `elite/autoplot.py` if the sequence outruns your PC. Plotting to the system
-you are currently in always fails (the game refuses it).
+Autoplot drives the game with emulated keystrokes using your own key bindings.
+These actions need **keyboard** keys bound (controller-only binds won't work):
+*Galaxy Map*, *UI Up*, *UI Down*, *UI Right*, *UI Select*, *UI Back*. Leave the
+game untouched for the ~15 s a plot takes. Timing constants live at the top of
+`elite/autoplot.py`; plotting to the system you're already in always fails (the
+game refuses it).
 
 ## Configuration
 
@@ -124,8 +132,19 @@ you are currently in always fails (the game refuses it).
 |------------------|----------------------------------|---------|
 | `ET_PORT`        | HTTP port                        | `8666`  |
 | `ET_DATA_DIR`    | Database folder                  | `data/` next to the app |
-| `ED_JOURNAL_DIR` | Journal folder override          | `%USERPROFILE%\Saved Games\Frontier Developments\Elite Dangerous` |
-| `ED_BINDINGS_DIR`| Key bindings folder override     | `%LOCALAPPDATA%\...\Options\Bindings` |
+| `ED_JOURNAL_DIR` | Journal folder override          | auto-detected (Windows / Proton) |
+| `ED_BINDINGS_DIR`| Key bindings folder override     | auto-detected (Windows / Proton) |
+| `ED_PLOT_KEY`    | Autoplot hold-key override       | `UI_Select` bind, then Enter |
+
+## Releases
+
+To cut a release (maintainer): tag and push — GitHub Actions builds the exe,
+smoke-tests it and publishes the release with the exe attached:
+
+```
+git tag v1.0.0
+git push origin v1.0.0
+```
 
 ## Security note
 

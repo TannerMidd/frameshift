@@ -35,7 +35,13 @@
       "PowerShell(.venv\\\\Scripts\\\\python -m py_compile elite/autoplot.py; if \\($?\\) { Write-Host 'py OK' }; .venv\\\\Scripts\\\\python -c \"import pydirectinput as p; import inspect; print\\('keyDown sig:', inspect.signature\\(p.keyDown\\)\\)\"; Stop-Process -Id \\(Get-Content \"f:\\\\Development\\\\elite-trader\\\\data\\\\server.pid\"\\) -Force -Confirm:$false -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; $pr = Start-Process -FilePath \"f:\\\\Development\\\\elite-trader\\\\.venv\\\\Scripts\\\\python.exe\" -ArgumentList \"f:\\\\Development\\\\elite-trader\\\\app.py\",\"--headless\" -WorkingDirectory \"f:\\\\Development\\\\elite-trader\" -PassThru -WindowStyle Hidden; $pr.Id | Out-File -Encoding ascii \"f:\\\\Development\\\\elite-trader\\\\data\\\\server.pid\"; Start-Sleep -Seconds 4; $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri http://127.0.0.1:8666/api/plot -ContentType \"application/json\" -Body '{\"system\":\"Swoilz VW-F c3\",\"dry_run\":true}' -TimeoutSec 15; Write-Host \"dry-run:\" $r.StatusCode)",
       "PowerShell($f = \"$env:LOCALAPPDATA\\\\Frontier Developments\\\\Elite Dangerous\\\\Options\\\\Bindings\\\\Custom.4.2.binds\"; [xml]$x = Get-Content $f; $x.Root.ChildNodes | Where-Object { $_.NodeType -eq 'Element' -and \\($_.Name -match 'Galaxy|Route|Plot|System|Map|Target|Cam|UI_'\\) } | ForEach-Object { $n=$_; $pri=$n.Primary; $sec=$n.Secondary; \"{0,-28} P:[{1} {2}] S:[{3} {4}]\" -f $n.Name, $pri.Device, $pri.Key, $sec.Device, $sec.Key })",
       "PowerShell($f = \"$env:LOCALAPPDATA\\\\Frontier Developments\\\\Elite Dangerous\\\\Options\\\\Bindings\\\\Custom.4.2.binds\"; [xml]$x = Get-Content $f; Write-Host \"=== Every action bound to Key_Space ===\"; $x.Root.ChildNodes | Where-Object { $_.NodeType -eq 'Element' } | ForEach-Object { $n=$_; foreach \\($slot in 'Primary','Secondary'\\) { $e=$n.$slot; if \\($e -and $e.Device -eq 'Keyboard' -and $e.Key -eq 'Key_Space'\\) { Write-Host \\(\"  {0}.{1}\" -f $n.Name, $slot\\) } } })",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "PowerShell(\\(Get-Command chromium-cli -ErrorAction SilentlyContinue\\).Source; \\(Get-Command playwright -ErrorAction SilentlyContinue\\).Source; Test-Path \"$env:ProgramFiles \\(x86\\)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\"; Test-Path \"$env:ProgramFiles\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\")",
+      "PowerShell(.venv\\\\Scripts\\\\python -m pip install --quiet playwright)",
+      "PowerShell(.venv\\\\Scripts\\\\python -c \"import playwright; print\\('playwright ok'\\)\")",
+      "PowerShell(.venv\\\\Scripts\\\\python \"C:\\\\Users\\\\Tanner\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\f--Development-elite-trader\\\\d59487b9-6b0b-40c2-815b-b3f2527203ef\\\\scratchpad\\\\shots.py\")"
     ]
   }
 }
