@@ -46,7 +46,13 @@
       "PowerShell(New-Item -ItemType Directory -Force \"f:\\\\Development\\\\elite-trader\\\\tests\")",
       "PowerShell(Copy-Item \"C:\\\\Users\\\\Tanner\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\f--Development-elite-trader\\\\d59487b9-6b0b-40c2-815b-b3f2527203ef\\\\scratchpad\\\\bio_test.py\" \"f:\\\\Development\\\\elite-trader\\\\tests\\\\test_bio.py\")",
       "PowerShell(git remote -v; git status --short; git log --oneline -3; \\(Get-Command gh -ErrorAction SilentlyContinue\\).Source)",
-      "PowerShell(git push -u origin main 2>&1)"
+      "PowerShell(git push -u origin main 2>&1)",
+      "PowerShell(git tag -a v1.0.0 -m \"Elite Trader v1.0.0 - first release\")",
+      "PowerShell(git push origin v1.0.0 2>&1)",
+      "PowerShell(Start-Sleep -Seconds 10; try { $runs = \\(Invoke-WebRequest -UseBasicParsing \"https://api.github.com/repos/TannerMidd/elite-trader/actions/runs?per_page=3\" -TimeoutSec 20\\).Content | ConvertFrom-Json; $runs.workflow_runs | ForEach-Object { Write-Host \\(\"{0} | {1} | {2} | {3}\" -f $_.name, $_.head_branch, $_.status, $_.conclusion\\) } } catch { Write-Host \"API error \\(private repo needs auth?\\):\" $_.Exception.Message })",
+      "PowerShell($rel = \\(Invoke-WebRequest -UseBasicParsing \"https://api.github.com/repos/TannerMidd/elite-trader/releases\" -TimeoutSec 20\\).Content | ConvertFrom-Json; $rel | ForEach-Object { Write-Host \\(\"release: {0} | created {1} | assets: {2}\" -f $_.tag_name, $_.created_at, \\($_.assets | ForEach-Object { \"$\\($_.name\\) \\($\\([math]::Round\\($_.size/1MB,1\\)\\) MB\\)\" }\\) -join \", \"\\) }; $run = \\(\\(Invoke-WebRequest -UseBasicParsing \"https://api.github.com/repos/TannerMidd/elite-trader/actions/runs?per_page=1\" -TimeoutSec 20\\).Content | ConvertFrom-Json\\).workflow_runs[0]; Write-Host \\(\"run created: {0} | updated: {1}\" -f $run.created_at, $run.updated_at\\))",
+      "PowerShell(try { $s = \\(Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8666/api/state -TimeoutSec 5\\).Content | ConvertFrom-Json; Write-Host \"server up | system:\" $s.system \"| ship:\" $s.ship_type \"| cargo cap:\" $s.cargo_capacity \"| credits:\" $s.credits } catch { Write-Host \"server down\" })",
+      "PowerShell(git push origin main 2>&1)"
     ]
   }
 }
