@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.serving import make_server
 
-from . import links, marketdb, routes, spansh
+from . import alerts, links, marketdb, routes, spansh
 from .eddn import LISTENER
 from .seed import SEEDER
 
@@ -210,6 +210,31 @@ def create_app(state):
         except routes.RouteError as exc:
             return jsonify({"error": str(exc)}), 400
         return jsonify({"results": results})
+
+    @app.get("/api/alerts")
+    def api_alerts():
+        resp = jsonify(alerts.snapshot())
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.post("/api/watch")
+    def api_watch():
+        body = request.get_json(silent=True) or {}
+        try:
+            watch = alerts.add_loop_watch(body.get("loop") or {})
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"ok": True, "watch": {"id": watch["id"], "label": watch["label"]}})
+
+    @app.post("/api/watch/remove")
+    def api_watch_remove():
+        body = request.get_json(silent=True) or {}
+        return jsonify({"ok": alerts.remove_watch(body.get("id", 0))})
+
+    @app.post("/api/alerts/clear")
+    def api_alerts_clear():
+        alerts.clear_alerts()
+        return jsonify({"ok": True})
 
     @app.get("/api/analytics")
     def api_analytics():

@@ -417,6 +417,97 @@ function commodityTableHtml(commodities) {
     `<tbody>${rows}</tbody></table>`;
 }
 
+/* ---------- route watches & alerts ---------- */
+
+async function watchLoop(loop, btn) {
+  if (window.Notification && Notification.permission === "default") {
+    try { await Notification.requestPermission(); } catch (e) {}
+  }
+  try {
+    const resp = await fetch("/api/watch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ loop }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Watch failed");
+    btn.textContent = "WATCHING";
+    btn.disabled = true;
+    pollAlerts(true);
+  } catch (err) {
+    alert(String(err.message || err));
+  }
+}
+
+let lastAlertTs = null;
+let alertPollTimer = null;
+
+async function pollAlerts() {
+  if (alertPollTimer) clearTimeout(alertPollTimer);
+  try {
+    const resp = await fetch("/api/alerts", { cache: "no-store" });
+    if (resp.ok) {
+      const data = await resp.json();
+      renderWatches(data.watches || []);
+      renderAlerts(data.alerts || []);
+    }
+  } catch (e) { /* retry next tick */ }
+  alertPollTimer = setTimeout(pollAlerts, 15000);
+}
+
+function renderWatches(watches) {
+  const el = $("watch-list");
+  el.innerHTML = "";
+  for (const w of watches) {
+    const chip = document.createElement("span");
+    chip.className = "watch-chip";
+    chip.append(`👁 ${w.label} `);
+    const x = document.createElement("button");
+    x.className = "copy";
+    x.textContent = "×";
+    x.title = "Stop watching";
+    x.addEventListener("click", async () => {
+      await fetch("/api/watch/remove", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: w.id }),
+      });
+      pollAlerts();
+    });
+    chip.appendChild(x);
+    el.appendChild(chip);
+  }
+}
+
+function renderAlerts(alerts) {
+  const strip = $("alert-strip");
+  if (!alerts.length) {
+    strip.classList.add("hidden");
+    return;
+  }
+  const newest = alerts[0];
+  if (newest.ts !== lastAlertTs) {
+    if (lastAlertTs !== null && window.Notification && Notification.permission === "granted") {
+      try { new Notification("Elite Trader route alert", { body: newest.text }); } catch (e) {}
+    }
+    lastAlertTs = newest.ts;
+  }
+  strip.classList.remove("hidden");
+  strip.innerHTML = "";
+  for (const a of alerts.slice(0, 3)) {
+    const row = document.createElement("div");
+    row.textContent = `⚠ ${a.text}`;
+    strip.appendChild(row);
+  }
+  const dismiss = document.createElement("button");
+  dismiss.className = "copy";
+  dismiss.textContent = "dismiss";
+  dismiss.addEventListener("click", async () => {
+    await fetch("/api/alerts/clear", { method: "POST" });
+    pollAlerts();
+  });
+  strip.appendChild(dismiss);
+}
+
 function renderLoops(loops) {
   const results = $("route-results");
   results.innerHTML = "";
@@ -446,8 +537,14 @@ function renderLoops(loops) {
     const line = div.querySelector(".route-line");
     const btnA = plotButton(l.a.system);
     const btnB = plotButton(l.b.system);
+    const watchBtn = document.createElement("button");
+    watchBtn.className = "plotbtn";
+    watchBtn.textContent = "WATCH";
+    watchBtn.title = "Alert me when this loop's prices/stock degrade (live EDDN)";
+    watchBtn.addEventListener("click", () => watchLoop(l, watchBtn));
     line.insertBefore(btnA, line.querySelector(".profit"));
     line.insertBefore(btnB, line.querySelector(".profit"));
+    line.insertBefore(watchBtn, line.querySelector(".profit"));
     results.appendChild(div);
   });
 }
@@ -1048,5 +1145,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   poll();
   pollDbStatus();
+  pollAlerts();
   loadCommodityList();
 });

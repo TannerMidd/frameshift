@@ -333,6 +333,7 @@ def _format_loops(conn, loops, start):
         return [
             {
                 "name": names.get(c["symbol"], c["symbol"].title()),
+                "symbol": c["symbol"],
                 "amount": c["amount"],
                 "buy_price": c["buy_price"],
                 "sell_price": c["sell_price"],
@@ -347,6 +348,7 @@ def _format_loops(conn, loops, start):
         return {
             "station": st["station"],
             "system": st["system"],
+            "market_id": st["market_id"],
             "dist_ls": st["dist_ls"],
             "large_pad": st["large_pad"],
             "updated_at": st["updated_at"],

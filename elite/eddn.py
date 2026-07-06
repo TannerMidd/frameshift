@@ -124,6 +124,13 @@ class EddnListener:
                 self.markets_updated += 1
         except Exception:
             conn.rollback()
+            return
+        try:
+            from . import alerts
+
+            alerts.on_market_update(market_id, station_name, rows)
+        except Exception:
+            pass  # alerting must never break ingestion
 
 
 LISTENER = EddnListener()
