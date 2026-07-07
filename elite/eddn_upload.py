@@ -5,24 +5,29 @@ Disable with ET_EDDN_UPLOAD=0."""
 
 import gzip
 import json
-import os
 import threading
 
 import requests
 
 from . import marketdb
 
+try:
+    from ._version import VERSION as SOFTWARE_VERSION
+except Exception:
+    SOFTWARE_VERSION = "0.0.0"
+
 UPLOAD_URL = "https://eddn.edcd.io:4430/upload/"
 SCHEMA = "https://eddn.edcd.io/schemas/commodity/3"
 SOFTWARE_NAME = "EliteTrader"
-SOFTWARE_VERSION = "1.1.0"
 MAX_AGE_S = 120  # never upload stale snapshots (e.g. bootstrap replays)
 
 SKIP_CATEGORIES = {"nonmarketable"}
 
 
 def enabled():
-    return os.environ.get("ET_EDDN_UPLOAD", "1") != "0"
+    from . import settings
+
+    return bool(settings.get("eddn_upload", True))
 
 
 def _symbol(raw):

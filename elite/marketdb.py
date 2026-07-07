@@ -152,6 +152,17 @@ def is_carrier(station_type, station_name):
     return station_type is None and bool(CARRIER_NAME_RE.match(station_name or ""))
 
 
+# Surface / on-foot stations you must land at (some pilots avoid these).
+SURFACE_TYPES = {
+    "Planetary Outpost", "Planetary Port", "Settlement", "Odyssey Settlement",
+    "On Foot Settlement", "Planetary Construction Depot",
+}
+
+
+def is_surface(station_type):
+    return station_type in SURFACE_TYPES
+
+
 def parse_update_time(value):
     """Spansh '2026-01-21 03:55:54+00' or EDDN '2026-07-05T20:50:21Z' -> epoch."""
     if not value:
@@ -195,9 +206,17 @@ def find_system(conn, name):
     ).fetchone()
 
 
-def stations_near(conn, x, y, z, radius, min_updated=0, require_large_pad=False, max_dist_ls=None):
+def stations_near(conn, x, y, z, radius, min_updated=0, require_large_pad=False, max_dist_ls=None,
+                  exclude_carriers=None, exclude_surface=None):
     """Stations with markets within `radius` ly of (x,y,z), with exact-sphere
-    filtering done in Python after a bounding-box query."""
+    filtering done in Python after a bounding-box query. Carrier/surface
+    exclusion defaults to the user's saved settings unless passed explicitly."""
+    if exclude_carriers is None or exclude_surface is None:
+        from . import settings  # lazy: avoids an import cycle with settings.py
+        if exclude_carriers is None:
+            exclude_carriers = settings.get("exclude_carriers", True)
+        if exclude_surface is None:
+            exclude_surface = settings.get("exclude_surface", False)
     rows = conn.execute(
         """SELECT st.market_id, st.name, st.type, st.dist_ls, st.large_pad, st.updated_at,
                   sy.id64, sy.name, sy.x, sy.y, sy.z
@@ -215,6 +234,10 @@ def stations_near(conn, x, y, z, radius, min_updated=0, require_large_pad=False,
         if require_large_pad and not m[4]:
             continue
         if max_dist_ls is not None and m[3] is not None and m[3] > max_dist_ls:
+            continue
+        if exclude_carriers and is_carrier(m[2], m[1]):
+            continue
+        if exclude_surface and is_surface(m[2]):
             continue
         out.append(
             {

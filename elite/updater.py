@@ -33,8 +33,10 @@ DOWNLOAD_TIMEOUT = 60
 
 def is_supported():
     """Auto-update only makes sense for the packaged Windows exe."""
+    from . import settings
+
     return bool(getattr(sys, "frozen", False)) and sys.platform == "win32" \
-        and os.environ.get("ET_AUTO_UPDATE", "1") != "0"
+        and bool(settings.get("auto_update", True))
 
 
 def parse_version(text):

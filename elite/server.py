@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.serving import make_server
 
-from . import alerts, links, marketdb, routes, spansh
+from . import alerts, links, marketdb, routes, settings, spansh
 from .eddn import LISTENER
 from .seed import SEEDER
 
@@ -445,6 +445,28 @@ def create_app(state):
         resp = jsonify(UPDATER.progress())
         resp.headers["Cache-Control"] = "no-store"
         return resp
+
+    @app.get("/api/settings")
+    def api_settings_get():
+        import sys
+
+        from . import journal
+        from ._version import VERSION
+
+        info = {
+            "version": VERSION,
+            "journal_dir": str(journal.find_journal_dir()),
+            "data_dir": str(marketdb.DATA_DIR),
+            "auto_update_supported": bool(getattr(sys, "frozen", False)) and sys.platform == "win32",
+        }
+        resp = jsonify({"settings": settings.all_settings(), "info": info})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.post("/api/settings")
+    def api_settings_set():
+        body = request.get_json(silent=True) or {}
+        return jsonify({"settings": settings.update(body)})
 
     @app.post("/api/plot")
     def api_plot():

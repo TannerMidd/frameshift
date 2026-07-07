@@ -1957,6 +1957,75 @@ async function pollUpdateStatus() {
   setTimeout(pollUpdateStatus, 700);
 }
 
+/* ---------- settings ---------- */
+
+const SETTINGS_DEFS = [
+  { key: "exclude_surface", label: "Exclude surface stations",
+    desc: "Hide planetary outposts, ports and settlements from trade routes, searches and mining — orbital stations only." },
+  { key: "exclude_carriers", label: "Exclude fleet carriers",
+    desc: "Keep fleet carriers out of route and market results. (Community data already filters most carriers.)" },
+  { key: "eddn_upload", label: "Contribute market data (EDDN)",
+    desc: "Upload markets you dock at back to the community feed this app is built on. Anonymous." },
+  { key: "auto_update", label: "Automatic updates",
+    desc: "Check for new releases and offer a one-click update.", requires: "auto_update_supported" },
+];
+
+async function loadSettings() {
+  try {
+    const resp = await fetch("/api/settings", { cache: "no-store" });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    renderSettings(data.settings || {}, data.info || {});
+  } catch (e) { /* offline */ }
+}
+
+function renderSettings(values, info) {
+  const list = $("settings-list");
+  if (!list) return;
+  list.innerHTML = "";
+  for (const def of SETTINGS_DEFS) {
+    const supported = !def.requires || info[def.requires];
+    const row = document.createElement("label");
+    row.className = "setting" + (supported ? "" : " disabled");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!values[def.key];
+    cb.disabled = !supported;
+    cb.addEventListener("change", () => saveSetting(def.key, cb.checked, row));
+    const sw = document.createElement("span");
+    sw.className = "switch";
+    const txt = document.createElement("div");
+    txt.className = "setting-text";
+    txt.innerHTML = `<b>${esc(def.label)}</b><div class="dim">${esc(def.desc)}` +
+      `${supported ? "" : " Packaged Windows app only."}</div>`;
+    row.append(cb, sw, txt);
+    list.appendChild(row);
+  }
+  const parts = [`Elite Trader v${esc(info.version || "?")}`];
+  if (info.journal_dir) parts.push(`journal: <span class="path">${esc(info.journal_dir)}</span>`);
+  if (info.data_dir) parts.push(`data: <span class="path">${esc(info.data_dir)}</span>`);
+  $("settings-info").innerHTML = parts.join(" · ");
+}
+
+async function saveSetting(key, value, row) {
+  try {
+    const resp = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [key]: value }),
+    });
+    if (!resp.ok) throw new Error();
+    if (row) {
+      row.classList.add("saved");
+      setTimeout(() => row.classList.remove("saved"), 700);
+    }
+  } catch (e) {
+    // revert the toggle on failure
+    const cb = row && row.querySelector("input");
+    if (cb) cb.checked = !value;
+  }
+}
+
 /* ---------- wiring ---------- */
 
 async function poll() {
@@ -2082,5 +2151,6 @@ document.addEventListener("DOMContentLoaded", () => {
   pollDbStatus();
   pollAlerts();
   pollUpdate();
+  loadSettings();
   loadCommodityList();
 });
