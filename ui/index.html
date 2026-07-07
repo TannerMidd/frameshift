@@ -55,6 +55,14 @@
     <div class="fp-tile"><div class="fp-label">BIO SAMPLES</div><div class="fp-value" id="fp-bio">—</div></div>
   </div>
 
+  <div class="fp-label fp-section">THIS SESSION · <span id="fp-sess-since"></span></div>
+  <div class="fp-tiles">
+    <div class="fp-tile"><div class="fp-label">EARNED</div><div class="fp-value" id="fp-sess-earned">—</div></div>
+    <div class="fp-tile"><div class="fp-label">CR / HR</div><div class="fp-value" id="fp-sess-crhr">—</div></div>
+    <div class="fp-tile"><div class="fp-label">JUMPS</div><div class="fp-value" id="fp-sess-jumps">—</div></div>
+    <div class="fp-tile"><div class="fp-label">DISTANCE</div><div class="fp-value" id="fp-sess-ly">—</div></div>
+  </div>
+
   <div class="fp-label fp-section">RECENT JUMPS · TAP TO RE-PLOT</div>
   <div class="fp-jumps" id="fp-jumps"></div>
 
@@ -279,6 +287,27 @@
   </div>
 
   <div class="tabpane hidden" id="tab-analytics">
+    <section class="card" id="session-card">
+      <div class="card-head">
+        <div class="label">THIS SESSION <span class="dim" id="session-since"></span></div>
+        <div class="value good" id="session-crhr">—</div>
+      </div>
+      <div class="stats an-tiles session-tiles">
+        <div class="stat"><div class="label">EARNED</div><div class="value" id="session-earned">—</div></div>
+        <div class="stat"><div class="label">DURATION</div><div class="value" id="session-duration">—</div></div>
+        <div class="stat"><div class="label">JUMPS</div><div class="value" id="session-jumps">—</div></div>
+        <div class="stat"><div class="label">DISTANCE</div><div class="value" id="session-ly">—</div></div>
+        <div class="stat"><div class="label">TRADE PROFIT</div><div class="value good" id="session-trade">—</div></div>
+        <div class="stat"><div class="label">TONS SOLD</div><div class="value" id="session-tons">—</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">EARNINGS BY SOURCE <span class="dim">all income this period · trade profit + missions, bounties, exploration &amp; exobiology</span></div>
+      <div id="earnings-breakdown" class="earnings"></div>
+      <div id="earnings-empty" class="dim empty">No earnings recorded in this period yet.</div>
+    </section>
+
     <section class="card">
       <div class="card-head">
         <div class="label">TRADING PERFORMANCE <span class="dim">from your journal history · sell profit = sale − average paid</span></div>
@@ -317,6 +346,15 @@
   </div>
 
   <div class="tabpane hidden" id="tab-local">
+    <section class="card" id="missions-card">
+      <div class="card-head">
+        <div class="label">ACTIVE MISSIONS <span class="dim">from your journal · red = expiring soon · ⚠ = cargo not aboard</span></div>
+        <div class="value orange" id="missions-count"></div>
+      </div>
+      <div id="missions-list"></div>
+      <div id="missions-empty" class="dim empty">No active missions — accept some at a station's mission board and they'll show here.</div>
+    </section>
+
     <section class="card hidden" id="colonisation-card">
       <div class="label">COLONIZATION PROJECTS <span class="dim">construction depots you've visited · what's still needed and where to buy it</span></div>
       <div id="colonisation-list"></div>
@@ -358,6 +396,15 @@
         <div id="cargo-sell-results"></div>
       </section>
     </div>
+
+    <section class="card" id="materials-card">
+      <div class="card-head">
+        <div class="label">ENGINEERING MATERIALS <span class="dim">raw · manufactured · encoded · from your journal</span></div>
+        <div class="value dim" id="materials-total"></div>
+      </div>
+      <div id="materials-groups" class="materials"></div>
+      <div id="materials-empty" class="dim empty">No materials recorded yet — the game logs your full inventory when you next launch it.</div>
+    </section>
   </div>
 
   <div class="tabpane hidden" id="tab-database">

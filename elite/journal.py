@@ -100,6 +100,13 @@ class JournalWatcher:
             updates["credits"] = e.get("Credits")
             self._log_balance_point(marketdb.parse_update_time(e.get("timestamp")), e.get("Credits"))
         self.state.update(**{k: v for k, v in updates.items() if v is not None})
+        # LoadGame marks the start of a play session. Bootstrap replays these
+        # chronologically, so the most recent one sets the current session and
+        # the jumps logged after it reconstruct the session's distance/count.
+        self.state.start_session(
+            marketdb.parse_update_time(e.get("timestamp")) or marketdb.now_epoch(),
+            e.get("Credits"),
+        )
 
     def _on_loadout(self, e):
         fuel_cap = e.get("FuelCapacity")
@@ -263,9 +270,11 @@ class JournalWatcher:
 
     def _on_sellexplorationdata(self, e):
         self.state.update(explo_scans={})
+        self._log_income(e, "exploration", e.get("TotalEarnings") or e.get("BaseValue"))
 
     def _on_multisellexplorationdata(self, e):
         self.state.update(explo_scans={})
+        self._log_income(e, "exploration", e.get("TotalEarnings") or e.get("BaseValue"))
 
     def _on_scanorganic(self, e):
         species = e.get("Species_Localised") or _clean_name(e.get("Species"))
@@ -358,8 +367,136 @@ class JournalWatcher:
         except Exception:
             pass
 
+    def _log_income(self, e, category, amount, detail=None):
+        try:
+            marketdb.log_income(
+                marketdb.parse_update_time(e.get("timestamp")), category, amount, detail
+            )
+        except Exception:
+            pass
+
     def _on_sellorganicdata(self, e):
+        total = sum((b.get("Value") or 0) + (b.get("Bonus") or 0) for b in e.get("BioData") or [])
+        self._log_income(e, "exobiology", total)
         self.state.update(bio_vault=[], bio_sampling=None)
+
+    def _on_missioncompleted(self, e):
+        self._log_income(e, "mission", e.get("Reward") or 0, e.get("Name"))
+        self._remove_mission(e.get("MissionID"))
+
+    def _on_missionabandoned(self, e):
+        self._remove_mission(e.get("MissionID"))
+
+    def _on_missionfailed(self, e):
+        self._remove_mission(e.get("MissionID"))
+
+    def _on_redeemvoucher(self, e):
+        vtype = (e.get("Type") or "").lower()
+        category = "bounty" if vtype in ("bounty", "combatbond", "settlement") else "other"
+        # RedeemVoucher can split across factions; Amount is the total received.
+        self._log_income(e, category, e.get("Amount"), vtype or None)
+
+    # ---------- mission board ----------
+
+    # Map the internal Mission_* name stem to a short kind for grouping/icons.
+    _MISSION_KINDS = (
+        ("delivery", "delivery"), ("collect", "collect"), ("salvage", "salvage"),
+        ("mining", "mining"), ("courier", "courier"), ("passenger", "passenger"),
+        ("massacre", "combat"), ("assassin", "combat"), ("hack", "combat"),
+        ("piracy", "piracy"), ("rescue", "rescue"), ("donation", "donation"),
+    )
+
+    @classmethod
+    def _mission_kind(cls, name):
+        low = (name or "").lower()
+        for needle, kind in cls._MISSION_KINDS:
+            if needle in low:
+                return kind
+        return "other"
+
+    def _on_missionaccepted(self, e):
+        mission_id = e.get("MissionID")
+        if mission_id is None:
+            return
+        missions = dict(self.state.missions)
+        missions[mission_id] = {
+            "id": mission_id,
+            "name": e.get("LocalisedName") or _clean_name(e.get("Name")),
+            "kind": self._mission_kind(e.get("Name")),
+            "faction": e.get("Faction"),
+            "commodity": e.get("Commodity_Localised") or _clean_name(e.get("Commodity")) or None,
+            "commodity_symbol": (e.get("Commodity") or "").strip("$;").removesuffix("_Name").removesuffix("_name").lower() or None,
+            "count": e.get("Count"),
+            "dest_system": e.get("DestinationSystem") or None,
+            "dest_station": e.get("DestinationStation") or None,
+            "target_faction": e.get("TargetFaction") or None,
+            "reward": e.get("Reward") or 0,
+            "wing": bool(e.get("Wing")),
+            "expiry": e.get("Expiry"),
+            "expiry_ts": marketdb.parse_update_time(e.get("Expiry")),
+            "accepted": e.get("timestamp"),
+        }
+        self.state.update(missions=missions)
+
+    def _remove_mission(self, mission_id):
+        if mission_id is None or mission_id not in self.state.missions:
+            return
+        missions = dict(self.state.missions)
+        missions.pop(mission_id, None)
+        self.state.update(missions=missions)
+
+    def _on_missions(self, e):
+        """Session-start snapshot: reconcile our set to the game's active list so
+        missions completed/expired while the app was closed drop off."""
+        active_ids = {m.get("MissionID") for m in e.get("Active") or []}
+        if not self.state.missions:
+            return
+        missions = {mid: m for mid, m in self.state.missions.items() if mid in active_ids}
+        if len(missions) != len(self.state.missions):
+            self.state.update(missions=missions)
+
+    # ---------- engineering materials ----------
+
+    @staticmethod
+    def _material_entry(item):
+        name = item.get("Name") or ""
+        return name.lower(), {
+            "symbol": name.lower(),
+            "name": item.get("Name_Localised") or _clean_name(name),
+            "count": item.get("Count", 0),
+        }
+
+    def _on_materials(self, e):
+        mats = {"Raw": {}, "Manufactured": {}, "Encoded": {}}
+        for cat in mats:
+            for item in e.get(cat) or []:
+                sym, entry = self._material_entry(item)
+                if sym:
+                    mats[cat][sym] = entry
+        self.state.update(materials=mats)
+
+    def _adjust_material(self, category, item, delta_sign):
+        cat = (category or "").title()
+        if cat not in ("Raw", "Manufactured", "Encoded"):
+            return
+        mats = {k: dict(v) for k, v in self.state.materials.items()}
+        sym, entry = self._material_entry(item)
+        if not sym:
+            return
+        current = mats[cat].get(sym, {"symbol": sym, "name": entry["name"], "count": 0})
+        current = dict(current)
+        current["count"] = max(0, current.get("count", 0) + delta_sign * (item.get("Count", 0) or 0))
+        if current["count"]:
+            mats[cat][sym] = current
+        else:
+            mats[cat].pop(sym, None)
+        self.state.update(materials=mats)
+
+    def _on_materialcollected(self, e):
+        self._adjust_material(e.get("Category"), e, +1)
+
+    def _on_materialdiscarded(self, e):
+        self._adjust_material(e.get("Category"), e, -1)
 
     def _on_died(self, e):
         # Exobio samples and unsold cartographic data are lost on death.
@@ -559,18 +696,55 @@ class JournalWatcher:
         if text:
             self._process_lines(text)
 
+    # Bump when the set of events swept below changes, to force a one-time
+    # re-import of already-processed journals (all logging is INSERT OR IGNORE).
+    HISTORY_VERSION = "2"
+
+    # etype -> handler, for both the history sweep and the marker prefilter.
+    _HISTORY_EVENTS = (
+        "MarketBuy", "MarketSell", "LoadGame", "MissionCompleted",
+        "SellExplorationData", "MultiSellExplorationData", "SellOrganicData",
+        "RedeemVoucher",
+    )
+
+    def _import_event(self, event):
+        etype = event.get("event")
+        if etype == "MarketBuy":
+            self._on_marketbuy(event)
+        elif etype == "MarketSell":
+            self._on_marketsell(event)
+        elif etype == "LoadGame" and event.get("Credits") is not None:
+            self._log_balance_point(
+                marketdb.parse_update_time(event.get("timestamp")), event["Credits"]
+            )
+        elif etype == "MissionCompleted":
+            self._log_income(event, "mission", event.get("Reward") or 0, event.get("Name"))
+        elif etype in ("SellExplorationData", "MultiSellExplorationData"):
+            self._log_income(event, "exploration",
+                             event.get("TotalEarnings") or event.get("BaseValue"))
+        elif etype == "SellOrganicData":
+            total = sum((b.get("Value") or 0) + (b.get("Bonus") or 0)
+                        for b in event.get("BioData") or [])
+            self._log_income(event, "exobiology", total)
+        elif etype == "RedeemVoucher":
+            self._on_redeemvoucher(event)
+
     def import_trade_history(self):
-        """One-time sweep of ALL journal files for trade/balance events, so
+        """One-time sweep of ALL journal files for trade/income/balance events, so
         analytics start with full history instead of just recent sessions."""
         if not self.journal_dir.is_dir():
             return
         conn = marketdb.connect()
         try:
+            if marketdb.get_meta(conn, "history_version") != self.HISTORY_VERSION:
+                conn.execute("DELETE FROM imported_journals")
+                marketdb.set_meta(conn, "history_version", self.HISTORY_VERSION)
+                conn.commit()
             done = {r[0] for r in conn.execute("SELECT filename FROM imported_journals")}
         finally:
             conn.close()
         files = journal_files(self.journal_dir)
-        markers = ('"event":"MarketBuy"', '"event":"MarketSell"', '"event":"LoadGame"')
+        markers = tuple(f'"event":"{name}"' for name in self._HISTORY_EVENTS)
         for path in files[:-1]:  # the newest file is still being written; tail covers it
             if path.name in done:
                 continue
@@ -582,15 +756,7 @@ class JournalWatcher:
                         event = json.loads(line.strip().rstrip(","))
                     except json.JSONDecodeError:
                         continue
-                    etype = event.get("event")
-                    if etype == "MarketBuy":
-                        self._on_marketbuy(event)
-                    elif etype == "MarketSell":
-                        self._on_marketsell(event)
-                    elif etype == "LoadGame" and event.get("Credits") is not None:
-                        self._log_balance_point(
-                            marketdb.parse_update_time(event.get("timestamp")), event["Credits"]
-                        )
+                    self._import_event(event)
             except OSError:
                 continue
             conn = marketdb.connect()

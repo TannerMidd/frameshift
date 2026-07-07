@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS trade_log(
 CREATE TABLE IF NOT EXISTS balance_log(
     ts INTEGER PRIMARY KEY,
     balance INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS income_log(
+    ts INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    detail TEXT,
+    amount INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(ts, category, detail, amount)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS imported_journals(filename TEXT PRIMARY KEY);
 """
 
@@ -95,6 +101,27 @@ def log_balance(ts, balance):
     conn = connect()
     try:
         conn.execute("INSERT OR REPLACE INTO balance_log(ts, balance) VALUES(?, ?)", (ts, balance))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# Non-trade income sources, categorised for the earnings breakdown. Trade
+# profit lives in trade_log; everything realised here is credits actually
+# received (voucher redemptions, not the accrued Bounty/Bond events), so the
+# two never double-count a credit.
+INCOME_CATEGORIES = ("mission", "exploration", "exobiology", "bounty", "other")
+
+
+def log_income(ts, category, amount, detail=None):
+    if not ts or not amount or not category:
+        return
+    conn = connect()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO income_log(ts, category, detail, amount) VALUES(?, ?, ?, ?)",
+            (ts, category, detail or "", int(amount)),
+        )
         conn.commit()
     finally:
         conn.close()

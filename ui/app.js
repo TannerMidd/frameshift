@@ -293,8 +293,185 @@ function render() {
   renderCargo();
   renderBio();
   renderColonisation();
+  renderSession(state.session);
+  renderMissions(state.missions);
+  renderMaterials(state.materials);
   renderPanel();
   seedRouteForm();
+}
+
+/* ---------- small DOM helpers ---------- */
+
+function setText(id, txt) {
+  const el = $(id);
+  if (el) el.textContent = txt;
+}
+
+function colorSign(id, v) {
+  const el = $(id);
+  if (el) el.style.color = v == null ? "" : (v >= 0 ? "var(--good)" : "var(--bad)");
+}
+
+function fmtDuration(secs) {
+  if (secs == null || secs < 0) return "—";
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m`;
+  return `${Math.floor(secs)}s`;
+}
+
+function signedCr(n) {
+  if (n == null) return "—";
+  return (n >= 0 ? "+" : "−") + shortCr(Math.abs(n)) + " cr";
+}
+
+/* ---------- live session tracker (F1) ---------- */
+
+function renderSession(sess) {
+  sess = sess || {};
+  const has = sess.start_ts != null;
+  const dur = has ? Math.max(0, Date.now() / 1000 - sess.start_ts) : null;
+  const earned = has ? sess.earned : null;
+  // Ignore cr/hr for the first couple of minutes so it doesn't read as ±millions.
+  const crhr = (has && dur > 120 && earned != null) ? earned / (dur / 3600) : null;
+
+  const earnedTxt = signedCr(earned);
+  const crhrTxt = crhr == null ? "—" : (crhr >= 0 ? "+" : "−") + shortCr(Math.abs(crhr)) + " cr/hr";
+  const jumpsTxt = has ? String(sess.jumps || 0) : "—";
+  const lyTxt = has ? fmtNum(sess.ly || 0) + " ly" : "—";
+  const durTxt = dur != null ? fmtDuration(dur) : "";
+
+  // Flight-panel tiles
+  setText("fp-sess-earned", earnedTxt);
+  setText("fp-sess-crhr", crhrTxt);
+  setText("fp-sess-jumps", jumpsTxt);
+  setText("fp-sess-ly", lyTxt);
+  setText("fp-sess-since", durTxt);
+  colorSign("fp-sess-earned", earned);
+
+  // Analytics session card (live parts; trade profit/tons filled by loadAnalytics)
+  setText("session-earned", earnedTxt);
+  setText("session-crhr", crhrTxt);
+  setText("session-duration", durTxt || "—");
+  setText("session-jumps", jumpsTxt);
+  setText("session-ly", lyTxt);
+  setText("session-since", durTxt ? "· " + durTxt : "");
+  colorSign("session-earned", earned);
+  colorSign("session-crhr", crhr);
+}
+
+/* ---------- earnings breakdown (F2) ---------- */
+
+const EARNINGS_META = {
+  trade: ["Trade", "#6fbf73"],
+  mission: ["Missions", "#e0a54a"],
+  exploration: ["Exploration", "#5aa9e6"],
+  exobiology: ["Exobiology", "#3fb6a8"],
+  bounty: ["Bounties & bonds", "#e05d5d"],
+  other: ["Other", "#8a8f98"],
+};
+
+function renderEarnings(e) {
+  const box = $("earnings-breakdown");
+  if (!box) return;
+  e = e || {};
+  const cats = Object.keys(EARNINGS_META).filter((k) => (e[k] || 0) > 0);
+  cats.sort((a, b) => (e[b] || 0) - (e[a] || 0));
+  const total = cats.reduce((s, k) => s + (e[k] || 0), 0);
+  $("earnings-empty").classList.toggle("hidden", cats.length > 0);
+  box.innerHTML = "";
+  for (const k of cats) {
+    const [label, color] = EARNINGS_META[k];
+    const val = e[k] || 0;
+    const pct = total ? (val / total) * 100 : 0;
+    const row = document.createElement("div");
+    row.className = "earn-row";
+    row.innerHTML =
+      `<div class="earn-head">` +
+      `<span class="earn-dot" style="background:${color}"></span>` +
+      `<span class="earn-label">${label}</span>` +
+      `<span class="earn-val">+${fmtNum(val)} cr</span>` +
+      `<span class="earn-pct">${pct.toFixed(0)}%</span></div>` +
+      `<div class="earn-bar"><div style="width:${pct}%;background:${color}"></div></div>`;
+    box.appendChild(row);
+  }
+}
+
+/* ---------- active missions (F5) ---------- */
+
+function renderMissions(missions) {
+  missions = missions || [];
+  const list = $("missions-list");
+  $("missions-empty").classList.toggle("hidden", missions.length > 0);
+  $("missions-count").textContent = missions.length ? missions.length + " active" : "";
+
+  const cargo = {};
+  for (const c of state.cargo_inventory || []) cargo[(c.symbol || "").toLowerCase()] = c.count;
+  // Re-render on mission/cargo change, and once a minute so countdowns tick.
+  const sig = JSON.stringify(missions) + "|" + JSON.stringify(state.cargo_inventory || [])
+    + "|" + Math.floor(Date.now() / 60000);
+  if (list.dataset.sig === sig) return;
+  list.dataset.sig = sig;
+  list.innerHTML = "";
+
+  for (const m of missions) {
+    const rem = m.expiry_ts ? m.expiry_ts - Date.now() / 1000 : null;
+    const expired = rem != null && rem <= 0;
+    const soon = rem != null && rem > 0 && rem < 3600;
+    const need = m.commodity_symbol ? (m.count || 0) : 0;
+    const have = need ? (cargo[m.commodity_symbol] || 0) : 0;
+    const short = need && have < need;
+
+    const div = document.createElement("div");
+    div.className = "mission";
+    div.innerHTML =
+      `<div class="mission-top">` +
+      `<span class="mission-kind kind-${esc(m.kind)}">${esc(m.kind)}</span>` +
+      `<b>${esc(m.name)}</b>` +
+      `<span class="mission-reward">+${fmtNum(m.reward)} cr</span>` +
+      `</div>` +
+      `<div class="mission-sub">` +
+      (m.dest_system ? `<span class="arrow">→</span> ${esc(m.dest_station || "?")}, <b>${esc(m.dest_system)}</b> ` : "") +
+      (m.commodity ? `· <span class="${short ? "warn" : ""}">${short ? "⚠ " : ""}${fmtNum(have)}/${fmtNum(need)} ${esc(m.commodity)}</span> ` : "") +
+      (m.faction ? `· ${esc(m.faction)} ` : "") +
+      (rem != null ? `· <span class="${expired ? "warn" : soon ? "soon" : "dim"}">${expired ? "EXPIRED" : "expires " + fmtDuration(rem)}</span>` : "") +
+      `</div>`;
+    if (m.dest_system) {
+      const top = div.querySelector(".mission-top");
+      top.insertBefore(plotButton(m.dest_system), top.querySelector(".mission-reward"));
+    }
+    list.appendChild(div);
+  }
+}
+
+/* ---------- engineering materials (F6) ---------- */
+
+function renderMaterials(mats) {
+  mats = mats || {};
+  const groups = $("materials-groups");
+  const total = mats.total || 0;
+  $("materials-empty").classList.toggle("hidden", total > 0);
+  $("materials-total").textContent = total ? total + " items" : "";
+  const sig = JSON.stringify(mats);
+  if (groups.dataset.sig === sig) return;
+  groups.dataset.sig = sig;
+  groups.innerHTML = "";
+  for (const cat of ["raw", "manufactured", "encoded"]) {
+    const items = mats[cat] || [];
+    if (!items.length) continue;
+    const col = document.createElement("div");
+    col.className = "mat-group";
+    col.innerHTML = `<div class="label">${cat.toUpperCase()} <span class="dim">${items.length}</span></div>`;
+    const ul = document.createElement("ul");
+    ul.className = "cargo-list";
+    for (const it of items) {
+      const li = document.createElement("li");
+      li.innerHTML = `<span>${esc(it.name)}</span><span class="count">${it.count}</span>`;
+      ul.appendChild(li);
+    }
+    col.appendChild(ul);
+    groups.appendChild(col);
+  }
 }
 
 function renderBanner() {
@@ -1255,6 +1432,10 @@ async function loadAnalytics() {
     $("an-week").textContent = "+" + fmtNum(a.week.profit) + " cr";
     $("an-period").textContent = "+" + fmtNum(a.period.profit) + " cr";
     $("an-tons").textContent = fmtNum(a.period.tons) + " t";
+    const sess = a.session || {};
+    setText("session-trade", sess.trade_profit != null ? "+" + fmtNum(sess.trade_profit) + " cr" : "—");
+    setText("session-tons", sess.tons_sold != null ? fmtNum(sess.tons_sold) + " t" : "—");
+    renderEarnings(a.earnings || {});
     drawBalanceChart($("an-balance"), a.balance || []);
     drawDailyChart($("an-daily"), a.daily || []);
     const top = a.top || [];
@@ -1265,7 +1446,7 @@ async function loadAnalytics() {
     for (const t of top) {
       const tr = document.createElement("tr");
       tr.innerHTML = `<td>${esc(t.name || t.symbol)}</td><td class="num">${fmtNum(t.tons)}</td>` +
-        `<td class="num profit-cell">+${fmtNum(t.profit)}</td>`;
+        `<td class="num profit-cell">${t.profit < 0 ? "" : "+"}${fmtNum(t.profit)}</td>`;
       tbody.appendChild(tr);
     }
   } catch (e) { /* retry on next open */ }

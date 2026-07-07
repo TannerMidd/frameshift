@@ -52,6 +52,16 @@ class AppState:
         # Unsold cartographic data (cleared on sell/death)
         self.explo_scans = {}  # body name -> {base, first, mapped, class}
 
+        # Active missions (MissionID -> details) and engineering materials
+        self.missions = {}
+        self.materials = {"Raw": {}, "Manufactured": {}, "Encoded": {}}
+
+        # Live session counters (reset each LoadGame / game launch)
+        self.session_start_ts = None      # epoch when the session began
+        self.session_start_credits = None  # balance at session start
+        self.session_jumps = 0
+        self.session_ly = 0.0
+
         self.last_journal_event = None  # timestamp string of most recent event seen
         self.journal_dir_found = True
 
@@ -65,6 +75,33 @@ class AppState:
             self.jump_history.appendleft(
                 {"system": system, "dist": dist, "timestamp": timestamp}
             )
+            self.session_jumps += 1
+            if dist:
+                self.session_ly += dist
+
+    def start_session(self, ts, credits):
+        """Reset the live-session counters at a game launch (LoadGame)."""
+        with self._lock:
+            self.session_start_ts = ts
+            self.session_start_credits = credits
+            self.session_jumps = 0
+            self.session_ly = 0.0
+
+    def _session_snapshot(self):
+        credits_now = self.credits
+        earned = (
+            credits_now - self.session_start_credits
+            if credits_now is not None and self.session_start_credits is not None
+            else None
+        )
+        return {
+            "start_ts": self.session_start_ts,
+            "start_credits": self.session_start_credits,
+            "credits_now": credits_now,
+            "earned": earned,
+            "jumps": self.session_jumps,
+            "ly": round(self.session_ly, 1),
+        }
 
     def _exploration_snapshot(self):
         from . import exploration
@@ -127,6 +164,21 @@ class AppState:
                 "colonisation": sorted(
                     self.colonisation.values(), key=lambda c: c.get("updated") or "", reverse=True
                 ),
+                "missions": sorted(
+                    self.missions.values(), key=lambda m: m.get("expiry_ts") or float("inf")
+                ),
+                "materials": self._materials_snapshot(),
+                "session": self._session_snapshot(),
                 "last_journal_event": self.last_journal_event,
                 "journal_dir_found": self.journal_dir_found,
             }
+
+    def _materials_snapshot(self):
+        out = {}
+        total = 0
+        for cat in ("Raw", "Manufactured", "Encoded"):
+            items = sorted(self.materials.get(cat, {}).values(), key=lambda m: -m.get("count", 0))
+            out[cat.lower()] = items
+            total += sum(m.get("count", 0) for m in items)
+        out["total"] = total
+        return out

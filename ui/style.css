@@ -453,6 +453,59 @@ td .sub { color: var(--dim); font-size: 11px; }
 }
 #an-days:focus { outline: none; border-color: var(--orange); box-shadow: var(--focus-ring); }
 
+/* session card */
+.session-tiles .value.good { color: var(--good); }
+#session-card .card-head .value { font-size: 20px; font-variant-numeric: tabular-nums; }
+
+/* earnings breakdown */
+.earnings { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
+.earn-row { display: flex; flex-direction: column; gap: 4px; }
+.earn-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.earn-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.earn-label { color: var(--text); }
+.earn-val { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); }
+.earn-pct { width: 42px; text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+.earn-bar { height: 7px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }
+.earn-bar > div { height: 100%; border-radius: 999px; transition: width .5s var(--ease); }
+
+/* active missions */
+.mission {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--orange);
+  border-radius: 6px;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+}
+.mission-top { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.mission-top b { font-size: 14.5px; }
+.mission-reward { margin-left: auto; color: var(--good); font-weight: 700; white-space: nowrap; }
+.mission-sub { margin-top: 4px; font-size: 12.5px; color: var(--dim); }
+.mission-sub b { color: var(--text); font-weight: 600; }
+.mission-sub .arrow { color: var(--orange); }
+.mission-sub .warn { color: var(--bad); font-weight: 600; }
+.mission-sub .soon { color: var(--orange-soft); }
+.mission-kind {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  flex: none;
+}
+.kind-delivery, .kind-collect, .kind-courier { color: #5aa9e6; border-color: #35506b; }
+.kind-salvage, .kind-mining { color: #e0a54a; border-color: #6b5730; }
+.kind-combat, .kind-piracy { color: var(--bad); border-color: #6b3535; }
+.kind-passenger, .kind-rescue { color: #3fb6a8; border-color: #305b56; }
+
+/* engineering materials */
+.materials { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 6px; }
+.mat-group .label { margin-bottom: 6px; }
+.mat-group .cargo-list li { padding: 4px 2px; }
+
 footer {
   text-align: center;
   padding: 12px;

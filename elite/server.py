@@ -310,6 +310,22 @@ def create_app(state):
                 ).fetchone()
                 return {"profit": row[0] or 0, "tons": row[1] or 0, "sales": row[2] or 0}
 
+            def earnings_since(cutoff):
+                """Unified income breakdown: trade profit plus every non-trade
+                source, keyed by category."""
+                out = {c: 0 for c in ("trade",) + marketdb.INCOME_CATEGORIES}
+                out["trade"] = conn.execute(
+                    "SELECT COALESCE(SUM(profit), 0) FROM trade_log"
+                    " WHERE event = 'sell' AND ts >= ?", (cutoff,)
+                ).fetchone()[0] or 0
+                for cat, amt in conn.execute(
+                    "SELECT category, SUM(amount) FROM income_log WHERE ts >= ? GROUP BY category",
+                    (cutoff,),
+                ).fetchall():
+                    out[cat] = (out.get(cat) or 0) + (amt or 0)
+                out["total"] = sum(out.values())
+                return out
+
             top = conn.execute(
                 """SELECT symbol, name, SUM(COALESCE(profit, 0)) AS p, SUM(count) AS c
                    FROM trade_log WHERE event = 'sell' AND ts >= ?
@@ -320,6 +336,16 @@ def create_app(state):
             today = profit_since(day_start)
             week = profit_since(now - 7 * 86400)
             period = profit_since(since)
+            period_earnings = earnings_since(since)
+
+            # Live session: earnings since the current game launch.
+            sess = state.snapshot().get("session") or {}
+            session = dict(sess)
+            if sess.get("start_ts"):
+                sp = profit_since(sess["start_ts"])
+                session["trade_profit"] = sp["profit"]
+                session["tons_sold"] = sp["tons"]
+                session["earnings"] = earnings_since(sess["start_ts"])
         finally:
             conn.close()
         resp = jsonify({
@@ -328,6 +354,8 @@ def create_app(state):
             "today": today,
             "week": week,
             "period": period,
+            "earnings": period_earnings,
+            "session": session,
             "top": [{"symbol": s, "name": n, "profit": p or 0, "tons": c or 0} for s, n, p, c in top],
         })
         resp.headers["Cache-Control"] = "no-store"
