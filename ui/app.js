@@ -102,7 +102,22 @@ function setPanelMode(on) {
   }
 }
 
-function setPanelPage(name) {
+/* The element that represents a panel page: the flight panel for "status",
+   otherwise that tab's pane (the location card above it stays put, like chrome). */
+function panelViewEl(name) {
+  return name === "status" ? $("flight-panel") : $("tab-" + name);
+}
+
+function slideIn(el, dir) {
+  if (!el || !dir) return;
+  el.classList.remove("slide-in-left", "slide-in-right");
+  void el.offsetWidth; // restart the animation if the class is re-applied
+  el.classList.add(dir > 0 ? "slide-in-right" : "slide-in-left");
+  el.addEventListener("animationend",
+    () => el.classList.remove("slide-in-left", "slide-in-right"), { once: true });
+}
+
+function setPanelPage(name, slideDir) {
   if (!PANEL_PAGES.includes(name)) name = "status";
   localStorage.setItem("panelPage", name);
   const statusPage = name === "status";
@@ -113,36 +128,69 @@ function setPanelPage(name) {
     b.classList.toggle("active", b.dataset.page === name));
   if (statusPage && state) renderPanel();
   window.scrollTo(0, 0);
+  if (slideDir) slideIn(panelViewEl(name), slideDir);
 }
 
 function panelSwipe(dx) {
   const current = localStorage.getItem("panelPage") || "status";
   const idx = PANEL_PAGES.indexOf(current);
-  const next = PANEL_PAGES[(idx + (dx < 0 ? 1 : PANEL_PAGES.length - 1)) % PANEL_PAGES.length];
-  setPanelPage(next);
+  const forward = dx < 0;
+  const next = PANEL_PAGES[(idx + (forward ? 1 : PANEL_PAGES.length - 1)) % PANEL_PAGES.length];
+  setPanelPage(next, forward ? 1 : -1);
 }
 
 function initPanelNav() {
   document.querySelectorAll("#fp-nav button").forEach((b) =>
     b.addEventListener("click", () => {
-      if (b.dataset.page === "__exit") setPanelMode(false);
-      else setPanelPage(b.dataset.page);
+      if (b.dataset.page === "__exit") { setPanelMode(false); return; }
+      const current = localStorage.getItem("panelPage") || "status";
+      const delta = PANEL_PAGES.indexOf(b.dataset.page) - PANEL_PAGES.indexOf(current);
+      setPanelPage(b.dataset.page, Math.sign(delta));
     }));
-  // Swipe left/right anywhere (except inside horizontally scrollable tables)
-  let touchX = null, touchY = null;
+
+  // Swipe left/right between pages (except inside horizontally scrollable
+  // tables and form fields). The page follows the finger while the gesture is
+  // in flight; past the threshold it hands off to a directional slide-in.
+  let startX = 0, startY = 0, gesture = null, view = null;
+  const endDrag = () => {
+    if (view) {
+      view.classList.remove("fp-dragging");
+      view.style.transform = "";
+    }
+    gesture = null;
+    view = null;
+  };
   document.addEventListener("touchstart", (ev) => {
-    if (!document.body.classList.contains("panel-mode")) return;
-    if (ev.target.closest(".table-wrap")) { touchX = null; return; }
-    touchX = ev.touches[0].clientX;
-    touchY = ev.touches[0].clientY;
+    gesture = null;
+    if (!document.body.classList.contains("panel-mode") || ev.touches.length !== 1) return;
+    if (ev.target.closest(".table-wrap, input, select, textarea")) return;
+    startX = ev.touches[0].clientX;
+    startY = ev.touches[0].clientY;
+    gesture = "pending";
+  }, { passive: true });
+  document.addEventListener("touchmove", (ev) => {
+    if (!gesture) return;
+    const dx = ev.touches[0].clientX - startX;
+    const dy = ev.touches[0].clientY - startY;
+    if (gesture === "pending") {
+      // Decide the gesture's orientation once, so vertical scrolling never drags the page.
+      if (Math.abs(dy) > 18 && Math.abs(dy) > Math.abs(dx)) { gesture = null; return; }
+      if (Math.abs(dx) > 14 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        gesture = "swipe";
+        view = panelViewEl(localStorage.getItem("panelPage") || "status");
+        view.classList.add("fp-dragging");
+      }
+      return;
+    }
+    if (view) view.style.transform = `translateX(${dx * 0.85}px)`;
   }, { passive: true });
   document.addEventListener("touchend", (ev) => {
-    if (touchX === null || !document.body.classList.contains("panel-mode")) return;
-    const dx = ev.changedTouches[0].clientX - touchX;
-    const dy = ev.changedTouches[0].clientY - touchY;
-    touchX = null;
-    if (Math.abs(dx) > 70 && Math.abs(dy) < 60) panelSwipe(dx);
+    if (gesture !== "swipe") { gesture = null; return; }
+    const dx = ev.changedTouches[0].clientX - startX;
+    endDrag();
+    if (Math.abs(dx) > 70) panelSwipe(dx);
   }, { passive: true });
+  document.addEventListener("touchcancel", endDrag, { passive: true });
 }
 
 function renderPanel() {
@@ -196,6 +244,7 @@ function plotButton(system) {
   btn.className = "plotbtn";
   btn.type = "button";
   btn.title = "Plot route in game to " + system;
+  btn.setAttribute("aria-label", btn.title);
   btn.textContent = "◎";
   btn.addEventListener("click", () => plotSystem(system));
   return btn;
@@ -658,6 +707,7 @@ function renderLoops(loops) {
   loops.forEach((l, i) => {
     const div = document.createElement("div");
     div.className = "hop";
+    div.style.setProperty("--i", i);
     const tons = [...l.outbound.commodities, ...l.inbound.commodities].reduce((a, c) => a + (c.amount || 0), 0);
     div.innerHTML =
       `<div class="route-line">` +
@@ -719,9 +769,10 @@ function renderRoutes(hops) {
     (firstOutlay ? `<span>needs ~${fmtNum(firstOutlay)} cr up front</span>` : "");
   results.appendChild(summary);
 
-  for (const h of hops) {
+  hops.forEach((h, i) => {
     const div = document.createElement("div");
     div.className = "hop";
+    div.style.setProperty("--i", i);
     const tons = (h.commodities || []).reduce((a, c) => a + (c.amount || 0), 0);
     const outlay = (h.commodities || []).reduce((a, c) => a + (c.amount || 0) * (c.buy_price || 0), 0);
 
@@ -745,7 +796,7 @@ function renderRoutes(hops) {
       line.insertBefore(plotButton(h.to_system), line.querySelector(".profit"));
     }
     results.appendChild(div);
-  }
+  });
 }
 
 function fmtNum(n) {
@@ -859,6 +910,7 @@ async function planRiches(ev) {
     systems.forEach((s, i) => {
       const div = document.createElement("div");
       div.className = "hop";
+      div.style.setProperty("--i", i);
       const bodies = (s.bodies || []).map((b) =>
         `<div>${esc(b.name)} <span class="sub">${esc(b.type || "?")}${b.terraformable ? " · terraformable" : ""}` +
         ` · ${b.dist_ls != null ? fmtNum(b.dist_ls) + " ls" : "?"} · ≈${fmtNum(b.map_value || b.scan_value)} cr</span></div>`
@@ -1055,9 +1107,10 @@ async function findCargoSell() {
     status.textContent = results.length
       ? `Top ${results.length} buyers for your cargo within 50 ly:`
       : "Nobody nearby is buying what you're carrying — try after the next EDDN update or widen the net.";
-    for (const r of results.slice(0, 5)) {
+    results.slice(0, 5).forEach((r, idx) => {
       const div = document.createElement("div");
       div.className = "hop";
+      div.style.setProperty("--i", idx);
       const items = r.items.map((i) =>
         `${esc(i.name)} ×${fmtNum(i.units)} @ ${fmtNum(i.sell_price)}${i.partial ? " (demand-capped)" : ""}`
       ).join(" · ");
@@ -1069,7 +1122,7 @@ async function findCargoSell() {
       const line = div.querySelector(".route-line");
       line.insertBefore(plotButton(r.system), line.querySelector(".profit"));
       out.appendChild(div);
-    }
+    });
   } catch (err) {
     status.classList.add("error");
     status.textContent = String(err.message || err);

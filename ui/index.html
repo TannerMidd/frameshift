@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d0e10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Elite Trader</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -61,7 +65,7 @@
   <div id="fp-plot-status" class="fp-sub fp-status"></div>
 </div>
 
-<nav id="fp-nav">
+<nav id="fp-nav" aria-label="Flight panel pages">
   <button data-page="status" class="active">STATUS</button>
   <button data-page="trade">TRADE</button>
   <button data-page="commodities">MARKET</button>
@@ -79,11 +83,11 @@
       <div class="label">CURRENT SYSTEM</div>
       <div class="system-row">
         <h1 id="system">—</h1>
-        <button class="copy" data-copy-target="system" title="Copy system name">⧉</button>
+        <button class="copy" data-copy-target="system" title="Copy system name" aria-label="Copy system name">⧉</button>
       </div>
       <div class="station-row">
         <span id="station-status" class="dim">—</span>
-        <button class="copy hidden" id="station-copy" title="Copy station name">⧉</button>
+        <button class="copy hidden" id="station-copy" title="Copy station name" aria-label="Copy station name">⧉</button>
       </div>
       <div class="dest-row dim" id="destination-row"></div>
       <form id="plot-form" class="plot-form">
