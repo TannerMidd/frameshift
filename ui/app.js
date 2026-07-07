@@ -1769,6 +1769,93 @@ function renderDbStatus(s) {
     `${s.db_size_mb} MB · seeded ${s.seeded_at || "?"} · ${eddnTxt}${upTxt}`;
 }
 
+/* ---------- auto-update ---------- */
+
+let updateInfo = null;
+let updateApplying = false;
+
+async function pollUpdate() {
+  try {
+    const resp = await fetch("/api/update/check", { cache: "no-store" });
+    if (resp.ok) {
+      updateInfo = await resp.json();
+      if (updateInfo.current) $("app-version").textContent = "v" + updateInfo.current;
+      renderUpdateBanner();
+    }
+  } catch (e) { /* offline; try again later */ }
+  // Re-check every 6 hours (the server caches, so this is cheap).
+  setTimeout(pollUpdate, 6 * 3600 * 1000);
+}
+
+function renderUpdateBanner() {
+  const el = $("update-banner");
+  if (!updateInfo || !updateInfo.available || !updateInfo.supported) {
+    if (!updateApplying) el.classList.add("hidden");
+    return;
+  }
+  el.classList.remove("hidden");
+  el.innerHTML =
+    `<span class="ub-badge">⬆ UPDATE</span>` +
+    `<span class="ub-text">Elite Trader <b>v${esc(updateInfo.latest)}</b> is available` +
+    ` <span class="dim">(you have v${esc(updateInfo.current)})</span></span>`;
+  const notes = document.createElement("a");
+  notes.href = updateInfo.notes_url;
+  notes.target = "_blank";
+  notes.rel = "noopener";
+  notes.className = "ub-notes";
+  notes.textContent = "release notes";
+  notes.addEventListener("click", (ev) => { if (openExternal(updateInfo.notes_url, "Release notes")) ev.preventDefault(); });
+  const btn = document.createElement("button");
+  btn.className = "ub-btn";
+  btn.textContent = "Update & restart";
+  btn.addEventListener("click", applyUpdate);
+  el.appendChild(notes);
+  el.appendChild(btn);
+}
+
+async function applyUpdate() {
+  if (updateApplying) return;
+  updateApplying = true;
+  const el = $("update-banner");
+  el.classList.remove("hidden");
+  el.innerHTML = `<span class="ub-badge">⬆ UPDATE</span><span class="ub-text" id="ub-status">Starting update…</span>`;
+  try {
+    const resp = await fetch("/api/update/apply", { method: "POST" });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Update failed to start");
+    pollUpdateStatus();
+  } catch (err) {
+    updateApplying = false;
+    $("ub-status").textContent = String(err.message || err);
+    el.classList.add("ub-error");
+  }
+}
+
+async function pollUpdateStatus() {
+  const status = $("ub-status");
+  try {
+    const resp = await fetch("/api/update/status", { cache: "no-store" });
+    const s = await resp.json();
+    if (s.phase === "downloading") {
+      if (status) status.textContent = `Downloading update… ${s.pct}% (${s.downloaded_mb} / ${s.total_mb} MB)`;
+    } else if (s.phase === "verifying") {
+      if (status) status.textContent = "Verifying…";
+    } else if (s.phase === "restarting") {
+      if (status) status.textContent = "Restarting — Elite Trader will reopen in a moment.";
+    } else if (s.phase === "error") {
+      updateApplying = false;
+      if (status) status.textContent = "Update failed: " + (s.error || "unknown error");
+      $("update-banner").classList.add("ub-error");
+      return;
+    }
+  } catch (e) {
+    // Connection lost while restarting is the expected success signal.
+    if (status) status.textContent = "Restarting — Elite Trader will reopen in a moment. You can close this tab.";
+    return;
+  }
+  setTimeout(pollUpdateStatus, 700);
+}
+
 /* ---------- wiring ---------- */
 
 async function poll() {
@@ -1892,5 +1979,6 @@ document.addEventListener("DOMContentLoaded", () => {
   poll();
   pollDbStatus();
   pollAlerts();
+  pollUpdate();
   loadCommodityList();
 });

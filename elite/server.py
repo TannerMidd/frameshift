@@ -383,6 +383,32 @@ def create_app(state):
             return jsonify({"error": "A database build is already running."}), 409
         return jsonify({"ok": True})
 
+    @app.get("/api/update/check")
+    def api_update_check():
+        from .updater import UPDATER
+
+        info = {k: v for k, v in UPDATER.check().items() if not k.startswith("_")}
+        resp = jsonify(info)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.post("/api/update/apply")
+    def api_update_apply():
+        from .updater import UPDATER
+
+        ok, err = UPDATER.start_update()
+        if not ok:
+            return jsonify({"error": err}), 400
+        return jsonify({"ok": True})
+
+    @app.get("/api/update/status")
+    def api_update_status():
+        from .updater import UPDATER
+
+        resp = jsonify(UPDATER.progress())
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
     @app.post("/api/plot")
     def api_plot():
         body = request.get_json(silent=True) or {}

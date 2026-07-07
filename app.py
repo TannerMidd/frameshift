@@ -49,6 +49,10 @@ def main():
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args()
 
+    from elite.updater import UPDATER
+
+    UPDATER.cleanup_leftovers()  # remove any staging files from a prior update
+
     state = AppState()
     JournalWatcher(state).start()
 
