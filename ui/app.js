@@ -1876,16 +1876,39 @@ let updateInfo = null;
 let updateApplying = false;
 
 async function pollUpdate() {
+  let delay = 30 * 60 * 1000;  // re-check every 30 min so a new release is noticed
   try {
     const resp = await fetch("/api/update/check", { cache: "no-store" });
     if (resp.ok) {
       updateInfo = await resp.json();
       if (updateInfo.current) $("app-version").textContent = "v" + updateInfo.current;
       renderUpdateBanner();
+      if (updateInfo.error) delay = 60 * 1000;  // transient check error: retry soon
+    } else {
+      delay = 60 * 1000;
     }
-  } catch (e) { /* offline; try again later */ }
-  // Re-check every 6 hours (the server caches, so this is cheap).
-  setTimeout(pollUpdate, 6 * 3600 * 1000);
+  } catch (e) {
+    delay = 60 * 1000;  // server not up yet (just launched): retry soon, not in hours
+  }
+  setTimeout(pollUpdate, delay);
+}
+
+async function checkForUpdatesNow(btn, stat) {
+  btn.disabled = true;
+  stat.textContent = "Checking…";
+  try {
+    const resp = await fetch("/api/update/check?force=1", { cache: "no-store" });
+    updateInfo = await resp.json();
+    if (updateInfo.current) $("app-version").textContent = "v" + updateInfo.current;
+    renderUpdateBanner();
+    if (updateInfo.error) stat.textContent = updateInfo.error;
+    else if (updateInfo.available) stat.textContent = `v${updateInfo.latest} available — see the banner at the top.`;
+    else stat.textContent = `You're on the latest version (v${updateInfo.current}).`;
+  } catch (e) {
+    stat.textContent = "Couldn't check right now.";
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderUpdateBanner() {
@@ -2001,6 +2024,19 @@ function renderSettings(values, info) {
     row.append(cb, sw, txt);
     list.appendChild(row);
   }
+  if (info.auto_update_supported) {
+    const wrap = document.createElement("div");
+    wrap.className = "update-check-row";
+    const btn = document.createElement("button");
+    btn.className = "primary small";
+    btn.textContent = "Check for updates now";
+    const stat = document.createElement("span");
+    stat.className = "dim";
+    btn.addEventListener("click", () => checkForUpdatesNow(btn, stat));
+    wrap.append(btn, stat);
+    list.appendChild(wrap);
+  }
+
   const parts = [`Elite Trader v${esc(info.version || "?")}`];
   if (info.journal_dir) parts.push(`journal: <span class="path">${esc(info.journal_dir)}</span>`);
   if (info.data_dir) parts.push(`data: <span class="path">${esc(info.data_dir)}</span>`);

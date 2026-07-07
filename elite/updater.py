@@ -55,6 +55,33 @@ def _exe_dir():
     return Path(sys.executable).resolve().parent
 
 
+def updater_script(exe_path, new_path):
+    """The helper batch that installs a downloaded update.
+
+    PyInstaller's onefile app is a bootloader parent plus a child, and both hold
+    EliteTrader.exe locked for a moment after the app exits — so the move is
+    retried until the file is actually free rather than attempted a fixed number
+    of times. `ping` provides the delay because `timeout` needs a console this
+    windowless helper process does not have (the original bug: the app closed but
+    never swapped or relaunched, leaving EliteTrader.new.exe behind)."""
+    return (
+        "@echo off\r\n"
+        "setlocal\r\n"
+        "set n=0\r\n"
+        ":retry\r\n"
+        f'move /y "{new_path}" "{exe_path}" >nul 2>&1\r\n'
+        "if not errorlevel 1 goto launch\r\n"
+        "set /a n+=1\r\n"
+        "if %n% geq 120 goto cleanup\r\n"
+        "ping -n 2 127.0.0.1 >nul\r\n"
+        "goto retry\r\n"
+        ":launch\r\n"
+        f'start "" "{exe_path}"\r\n'
+        ":cleanup\r\n"
+        'del "%~f0" >nul 2>&1\r\n'
+    )
+
+
 class Updater:
     def __init__(self):
         self._lock = threading.Lock()
@@ -110,8 +137,12 @@ class Updater:
             result["error"] = f"Could not reach GitHub: {exc}"
 
         with self._lock:
-            self._latest = result
-            self._checked_at = now
+            # Only cache a good result; a failed/errored check must not stick
+            # around for the whole TTL, or a transient hiccup at launch hides
+            # updates until the next long re-poll.
+            if not result.get("error"):
+                self._latest = result
+                self._checked_at = now
         return result
 
     # ---------- update flow ----------
@@ -216,43 +247,26 @@ class Updater:
         return None
 
     def _stage_and_restart(self, new_path):
-        """Write a helper batch that waits for this process to exit, overwrites
-        the exe, and relaunches — then quit so it can do its work."""
+        """Write a helper batch that swaps in the new exe and relaunches, then
+        quit so it can do its work."""
         exe = Path(sys.executable).resolve()
         bat = _exe_dir() / "_et_update.bat"
-        script = (
-            "@echo off\r\n"
-            ":wait\r\n"
-            f'tasklist /fi "PID eq {os.getpid()}" /nh | find /i "{exe.name}" >nul\r\n'
-            "if not errorlevel 1 (\r\n"
-            "  timeout /t 1 /nobreak >nul\r\n"
-            "  goto wait\r\n"
-            ")\r\n"
-            f'move /y "{new_path}" "{exe}" >nul 2>&1\r\n'
-            "if errorlevel 1 (\r\n"
-            "  timeout /t 2 /nobreak >nul\r\n"
-            f'  move /y "{new_path}" "{exe}" >nul 2>&1\r\n'
-            ")\r\n"
-            f'start "" "{exe}"\r\n'
-            'del "%~f0" >nul 2>&1\r\n'
-        )
-        bat.write_text(script, encoding="ascii")
-        flags = 0
-        if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
-            flags |= subprocess.CREATE_NEW_PROCESS_GROUP
-        if hasattr(subprocess, "DETACHED_PROCESS"):
-            flags |= subprocess.DETACHED_PROCESS
+        bat.write_text(updater_script(exe, new_path), encoding="ascii")
+        # CREATE_NO_WINDOW (not DETACHED_PROCESS) keeps a console so the batch's
+        # delays work, but shows no window; the new group lets it outlive us.
+        flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) \
+            | getattr(subprocess, "CREATE_NO_WINDOW", 0)
         subprocess.Popen(["cmd", "/c", str(bat)], creationflags=flags, close_fds=True)
-        # Give the detached helper a moment to start, then exit hard so the file
-        # lock is released and the swap can proceed.
-        time.sleep(0.6)
+        time.sleep(0.3)  # let the helper start, then exit so the exe unlocks
         os._exit(0)
 
     def cleanup_leftovers(self):
-        """Remove staging artifacts left by a previous update (best-effort)."""
+        """Remove stale staging artifacts on launch. Never deletes
+        EliteTrader.new.exe — that may be a downloaded update not yet applied,
+        which the next update run overwrites anyway."""
         if not getattr(sys, "frozen", False):
             return
-        for name in ("EliteTrader.new.exe", "_et_update.bat", "EliteTrader.old.exe"):
+        for name in ("_et_update.bat", "EliteTrader.old.exe"):
             try:
                 (_exe_dir() / name).unlink()
             except OSError:

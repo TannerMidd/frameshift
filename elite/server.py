@@ -424,7 +424,8 @@ def create_app(state):
     def api_update_check():
         from .updater import UPDATER
 
-        info = {k: v for k, v in UPDATER.check().items() if not k.startswith("_")}
+        force = request.args.get("force") == "1"
+        info = {k: v for k, v in UPDATER.check(force=force).items() if not k.startswith("_")}
         resp = jsonify(info)
         resp.headers["Cache-Control"] = "no-store"
         return resp
