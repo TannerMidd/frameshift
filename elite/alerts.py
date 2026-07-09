@@ -12,6 +12,7 @@ import threading
 from collections import deque
 
 from . import marketdb
+from .errors import UserFacingError
 
 SELL_DROP = 0.90   # alert when a sell price falls below 90% of baseline
 BUY_RISE = 1.10    # alert when a buy price rises above 110% of baseline
@@ -71,7 +72,7 @@ def add_loop_watch(loop):
     _ensure_loaded()
     a, b = loop.get("a") or {}, loop.get("b") or {}
     if not a.get("market_id") or not b.get("market_id"):
-        raise ValueError("Loop has no market ids - re-run the route search first.")
+        raise UserFacingError("Loop has no market ids - re-run the route search first.")
     label = f"{a.get('station')} ⇄ {b.get('station')}"
     conditions = []  # (market_id, symbol, side, units, baseline_price, station)
 
@@ -86,7 +87,7 @@ def add_loop_watch(loop):
     leg(a, b, (loop.get("outbound") or {}).get("commodities"))
     leg(b, a, (loop.get("inbound") or {}).get("commodities"))
     if not conditions:
-        raise ValueError("Loop has no commodities to watch.")
+        raise UserFacingError("Loop has no commodities to watch.")
     watch = {
         "label": label,
         "market_ids": {a["market_id"], b["market_id"]},

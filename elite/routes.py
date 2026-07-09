@@ -9,6 +9,7 @@ capital), and the best few partial routes are extended each round."""
 import math
 
 from . import marketdb
+from .errors import UserFacingError
 
 BEAM_WIDTH = 6
 DESTS_PER_HOP = 5
@@ -39,7 +40,7 @@ def _leg_time_s(distance_ly, dest_dist_ls, jump_range):
     return jumps * JUMP_TIME_S + _supercruise_time_s(dest_dist_ls) + DOCK_OVERHEAD_S
 
 
-class RouteError(Exception):
+class RouteError(UserFacingError):
     pass
 
 

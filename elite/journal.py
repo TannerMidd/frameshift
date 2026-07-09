@@ -103,6 +103,20 @@ def journal_files(journal_dir):
     return sorted(journal_dir.glob("Journal.*.log"))
 
 
+def probe_roots():
+    """Directories the LAN-reachable journal-folder validator may look inside:
+    the user's profile, the (possibly relocated) Saved Games folder, and
+    wherever auto-detection currently points. Confining the live check to
+    these stops the open API being used to probe arbitrary paths, while still
+    covering every place a journal folder can plausibly live."""
+    roots = [Path.home()]
+    known = _windows_saved_games()
+    if known:
+        roots.append(known)
+    roots.append(find_journal_dir())
+    return roots
+
+
 class JournalWatcher:
     def __init__(self, state, journal_dir=None):
         self.state = state

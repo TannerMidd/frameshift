@@ -5,6 +5,7 @@ import time
 import requests
 
 from . import biovalues
+from .errors import UserFacingError
 
 BASE = "https://spansh.co.uk/api"
 HEADERS = {"User-Agent": "EliteTrader/1.0 (personal ED companion app)"}
@@ -45,7 +46,7 @@ def system_genuses(id64):
     return out
 
 
-class SpanshError(Exception):
+class SpanshError(UserFacingError):
     pass
 
 
@@ -263,7 +264,10 @@ def station_search(reference_system, module=None, ship=None, size=20, coords=Non
     import re
 
     if MODULE_RE is None:
-        MODULE_RE = re.compile(r"^(\d)\s*([A-EI])\s+(.+)$", re.IGNORECASE)
+        # (\S.*) rather than (.+): the name may not start with whitespace, which
+        # removes the \s+/. ambiguity that made the match polynomial-time on
+        # adversarial input (the query string comes off the LAN API).
+        MODULE_RE = re.compile(r"^(\d)\s*([A-EI])\s+(\S.*)$", re.IGNORECASE)
     filters = {}
     if module:
         m = MODULE_RE.match(module.strip())

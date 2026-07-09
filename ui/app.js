@@ -2774,10 +2774,12 @@ function buildJournalDirSetting(values) {
       const resp = await fetch("/api/journal-dir/validate?path=" + encodeURIComponent(input.value.trim()));
       const v = await resp.json();
       if (mine !== seq) return;  // a newer keystroke's check superseded this one
-      status.classList.toggle("error", !v.exists);
-      status.textContent = v.exists
-        ? `✓ ${v.files} journal file${v.files === 1 ? "" : "s"} in ${v.path}` + (v.auto ? " (auto-detected)" : "")
-        : `✗ folder not found: ${v.path}`;
+      status.classList.toggle("error", !v.exists && !v.unchecked);
+      status.textContent = v.unchecked
+        ? `– can't check ${v.path} from here (outside your user profile); SAVE still applies it`
+        : v.exists
+          ? `✓ ${v.files} journal file${v.files === 1 ? "" : "s"} in ${v.path}` + (v.auto ? " (auto-detected)" : "")
+          : `✗ folder not found: ${v.path}`;
     } catch { /* server briefly unreachable */ }
   };
   input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(validate, 350); });

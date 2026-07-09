@@ -13,6 +13,7 @@ import threading
 import time
 
 from .bindings import BindingsError, ed_key_to_pydirect, keyboard_key_name, load_keyboard_binds
+from .errors import UserFacingError
 from .journal import find_journal_dir
 
 ED_WINDOW_TITLE = "Elite - Dangerous (CLIENT)"
@@ -76,7 +77,7 @@ def _scancode_tap(scancode, hold=0.08):
     user32.SendInput(1, ctypes.byref(up), ctypes.sizeof(_INPUT))
 
 
-class AutoplotError(Exception):
+class AutoplotError(UserFacingError):
     pass
 
 

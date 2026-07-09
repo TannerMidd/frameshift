@@ -172,7 +172,9 @@ class Updater:
                 result["available"] = bool(asset) and \
                     parse_version(tag) > parse_version(VERSION)
         except requests.RequestException as exc:
-            result["error"] = f"Could not reach GitHub: {exc}"
+            # Only the exception class name: check() results end up in API
+            # responses, and full requests error text carries internal detail.
+            result["error"] = f"Could not reach GitHub ({type(exc).__name__})"
 
         with self._lock:
             # Only cache a good result; a failed/errored check must not stick

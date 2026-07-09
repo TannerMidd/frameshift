@@ -9,9 +9,22 @@ from werkzeug.serving import make_server
 
 from . import alerts, biovalues, links, marketdb, routes, settings, spansh
 from .eddn import LISTENER
+from .errors import UserFacingError
 from .seed import SEEDER
 
 UI_DIR = Path(__file__).resolve().parent.parent / "ui"
+
+
+def error_response(exc, status, **extra):
+    """JSON error response for an expected failure. Only messages explicitly
+    written for the player (UserFacingError.user_message) are echoed to the
+    client; anything else stays generic so internal details never leak."""
+    if isinstance(exc, UserFacingError):
+        message = exc.user_message
+    else:
+        logging.getLogger(__name__).warning("unexpected API error: %r", exc)
+        message = "Unexpected server error."
+    return jsonify({"error": message, **extra}), status
 
 
 def create_app(state):
@@ -83,7 +96,7 @@ def create_app(state):
                     top_n=max(1, min(25, num("results", 8, int))),
                 )
             except routes.RouteError as exc:
-                return jsonify({"error": str(exc), "source": "local"}), 502
+                return error_response(exc, 502, source="local")
             return jsonify({"loops": loops, "source": "local", "mode": "loop"})
 
         if source == "local":
@@ -94,7 +107,7 @@ def create_app(state):
                     **params,
                 )
             except routes.RouteError as exc:
-                return jsonify({"error": str(exc), "source": "local"}), 502
+                return error_response(exc, 502, source="local")
         else:
             try:
                 hops = spansh.plan_route(
@@ -103,7 +116,7 @@ def create_app(state):
                     **params,
                 )
             except spansh.SpanshError as exc:
-                return jsonify({"error": str(exc), "source": "spansh"}), 502
+                return error_response(exc, 502, source="spansh")
         return jsonify({"hops": hops, "source": source, "mode": "chain"})
 
     @app.get("/api/commodities")
@@ -133,7 +146,7 @@ def create_app(state):
                 requires_large_pad=args.get("large_pad") == "1",
             )
         except routes.RouteError as exc:
-            return jsonify({"error": str(exc)}), 400
+            return error_response(exc, 400)
         return jsonify(result)
 
     @app.get("/api/mining")
@@ -157,7 +170,7 @@ def create_app(state):
                 requires_large_pad=args.get("large_pad") == "1",
             )
         except routes.RouteError as exc:
-            return jsonify({"error": str(exc)}), 400
+            return error_response(exc, 400)
         return jsonify(result)
 
     @app.get("/api/mining/hotspots")
@@ -170,7 +183,7 @@ def create_app(state):
         try:
             hotspots = spansh.mining_hotspots(ref, mineral, size=15)
         except spansh.SpanshError as exc:
-            return jsonify({"error": str(exc)}), 502
+            return error_response(exc, 502)
         return jsonify({"mineral": mineral, "reference": ref, "hotspots": hotspots})
 
     @app.get("/api/exobio-route")
@@ -194,7 +207,7 @@ def create_app(state):
                 genera=genera,
             )
         except spansh.SpanshError as exc:
-            return jsonify({"error": str(exc)}), 502
+            return error_response(exc, 502)
         total = sum(s["value"] for s in systems)
         return jsonify({"reference": ref, "systems": systems, "genera": genera,
                         "total_value": total, "relaxed": relaxed})
@@ -282,7 +295,7 @@ def create_app(state):
         try:
             traders = spansh.material_traders(ref, kind, coords=snap.get("star_pos"))
         except spansh.SpanshError as exc:
-            return jsonify({"error": str(exc)}), 502
+            return error_response(exc, 502)
         return jsonify({"kind": kind.title(), "reference": ref, "traders": traders})
 
     @app.get("/api/price-history")
@@ -319,7 +332,7 @@ def create_app(state):
                 loop=bool(body.get("loop", True)),
             )
         except spansh.SpanshError as exc:
-            return jsonify({"error": str(exc)}), 502
+            return error_response(exc, 502)
         return jsonify({"systems": systems})
 
     @app.post("/api/neutron")
@@ -344,7 +357,7 @@ def create_app(state):
                 efficiency=num("efficiency", 60, int),
             )
         except spansh.SpanshError as exc:
-            return jsonify({"error": str(exc)}), 502
+            return error_response(exc, 502)
         return jsonify(route)
 
     @app.get("/api/station-search")
@@ -362,7 +375,7 @@ def create_app(state):
                 coords=snap.get("star_pos"),
             )
         except spansh.SpanshError as exc:
-            return jsonify({"error": str(exc)}), 502
+            return error_response(exc, 502)
         return jsonify({"results": results})
 
     @app.get("/api/cargo-sell")
@@ -386,7 +399,7 @@ def create_app(state):
                 requires_large_pad=args.get("large_pad") == "1",
             )
         except routes.RouteError as exc:
-            return jsonify({"error": str(exc)}), 400
+            return error_response(exc, 400)
         return jsonify({"results": results})
 
     @app.get("/api/colonisation-sources")
@@ -426,8 +439,8 @@ def create_app(state):
         body = request.get_json(silent=True) or {}
         try:
             watch = alerts.add_loop_watch(body.get("loop") or {})
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+        except (UserFacingError, ValueError) as exc:
+            return error_response(exc, 400)
         return jsonify({"ok": True, "watch": {"id": watch["id"], "label": watch["label"]}})
 
     @app.post("/api/watch/remove")
@@ -596,17 +609,45 @@ def create_app(state):
     @app.get("/api/journal-dir/validate")
     def api_journal_dir_validate():
         """Live validation for the journal-folder setting. Empty path = show
-        what auto-detection (env var included) would resolve to."""
+        what auto-detection (env var included) would resolve to.
+
+        The API is reachable from the whole LAN, so a typed path is only
+        probed when it lies inside a plausible journal location (user profile,
+        Saved Games, the auto-detected folder) — anything else is reported as
+        unchecked rather than touched, closing off arbitrary-path probing.
+        SAVE never depends on this check."""
+        import os.path
         from pathlib import Path
 
         from . import journal
 
         raw = (request.args.get("path") or "").strip()
         auto = not raw
-        path = Path(raw) if raw else journal.find_journal_dir()
-        exists = path.is_dir()
-        files = len(journal.journal_files(path)) if exists else 0
-        resp = jsonify({"path": str(path), "auto": auto, "exists": exists, "files": files})
+        if auto:
+            path = journal.find_journal_dir()
+            exists = path.is_dir()
+            files = len(journal.journal_files(path)) if exists else 0
+            resp = jsonify({"path": str(path), "auto": True, "exists": exists, "files": files})
+            resp.headers["Cache-Control"] = "no-store"
+            return resp
+
+        # Windows filesystems are case-insensitive; fold both sides there so
+        # the containment check can't be dodged by casing.
+        norm = os.path.normpath(os.path.abspath(raw))
+        display = norm
+        roots = tuple(os.path.normpath(str(r)) + os.sep for r in journal.probe_roots())
+        if os.name == "nt":
+            norm = norm.lower()
+            roots = tuple(r.lower() for r in roots)
+        if norm.startswith(roots):
+            path = Path(norm)
+            exists = path.is_dir()
+            files = len(journal.journal_files(path)) if exists else 0
+            unchecked = False
+        else:
+            exists, files, unchecked = None, 0, True
+        resp = jsonify({"path": display, "auto": False, "exists": exists,
+                        "files": files, "unchecked": unchecked})
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
@@ -628,7 +669,7 @@ def create_app(state):
         except autoplot.AutoplotCancelled:
             return jsonify({"cancelled": True, "system": system}), 200
         except autoplot.AutoplotError as exc:
-            return jsonify({"error": str(exc)}), 409
+            return error_response(exc, 409)
         return jsonify({"ok": True, "system": system, "steps": steps})
 
     @app.post("/api/plot/cancel")
