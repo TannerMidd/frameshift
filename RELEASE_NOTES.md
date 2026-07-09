@@ -1,43 +1,28 @@
-## Elite Trader v1.10.0 — engineering, combat, price history & station intel
+## Elite Trader v1.10.1 — security hardening
 
-The biggest feature release yet — the first wave of the all-in-one roadmap.
+A small, focused release: GitHub's CodeQL security scan was run against the
+whole codebase and **every finding (19) is fixed**. No features changed —
+everything from v1.10.0 works exactly as before.
 
-### 🔧 Engineering planner
-Pin a blueprint (say, **FSD Increased Range → G5**) and get a live checklist
-of every material the full upgrade needs, checked against your inventory:
-exact shortfalls, **where each material comes from** (hover), **material-trader
-swap suggestions** from your surplus, and the nearest raw/manufactured/encoded
-traders one tap from plotting. A voice callout tells you the moment your list
-completes. Includes a built-in **"New to engineering?"** primer — no wiki tab
-required. ([wiki](../../wiki/Engineering))
+### 🔒 What was hardened
+Elite Trader serves its UI to your whole LAN (that's how the tablet panel
+works), so the API deserves the same care as a public web app:
 
-### ⚔️ Combat tracker & massacre stacks
-Massacre-stack bookkeeping without the spreadsheet: stacks grouped per target
-faction with the *correct* math (kills count for every giver at once — the
-largest giver sets the target), progress bars, payouts, and a callout when the
-stack completes. Plus session kills / bounty / bond claims, and a **rebuy
-safety net** — amber under 2× rebuy, red (and spoken) when you can't cover
-one. ([wiki](../../wiki/Combat-and-Missions))
+- **Error messages can never leak internals.** Only messages written for the
+  player are ever sent back by the API; anything unexpected is logged on the
+  machine running the app and the client just sees a generic error.
+- **No more path probing via the journal-folder check.** The live "is this
+  folder right?" validation in Settings now only inspects places a journal
+  folder can plausibly live (your user profile / Saved Games / the
+  auto-detected folder). Anything else shows as "can't check from here" —
+  SAVE still works for exotic setups.
+- **A search-query regex could be made slow on purpose** (a classic
+  denial-of-service trick); it now runs in linear time no matter what's
+  typed into module search.
 
-### 📈 Price history
-Stations you dock at (and watched routes) now build **price history**: a
-sparkline column in the station market, and **tap any sparkline for a full
-price chart**. WATCH alerts **survive restarts** and re-anchor after firing,
-so a collapsing price alerts you once per further 10% step.
-
-### 🛰️ System stations viewer
-Every station in any system — orbital and surface — with pads, economy,
-faction, services, and a one-tap expand into its full EDDN-fresh market table.
-
-### 🐛 Fixes
-- Wide-radius searches (3000+ ly — deep-space life) no longer crash commodity
-  search, mining and sell-cargo ("too many SQL variables").
-- Outfitting/module search works from systems Spansh doesn't index (fresh
-  discoveries) by falling back to your coordinates.
-- REBUY shown on the location card and flight panel.
-
-Also: the README got a full rewrite (short + sharp, wiki carries the depth)
-and the wiki gained Engineering and Combat & Missions pages.
+### 🐛 Also
+- Update-check errors now say what went wrong by name (e.g. `ConnectTimeout`)
+  instead of dumping a wall of connection internals into the Settings panel.
 
 ---
 
