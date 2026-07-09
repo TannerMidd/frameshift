@@ -49,6 +49,71 @@ class SpanshError(Exception):
     pass
 
 
+# Service chips the UI shows; the raw list runs to 25+ entries per station.
+KEY_SERVICES = (
+    "Market", "Outfitting", "Shipyard", "Material Trader", "Technology Broker",
+    "Universal Cartographics", "Vista Genomics", "Interstellar Factors",
+    "Black Market", "Refuel", "Repair", "Restock", "Search and Rescue",
+)
+
+_station_dump_cache = {}  # id64 -> (fetched_epoch, stations)
+_STATION_DUMP_TTL = 600
+
+
+def _parse_dump_stations(system):
+    """Normalise a Spansh system dump into station-fact rows. Orbital stations
+    sit at the system level; surface ports/settlements hang off bodies."""
+    out = []
+
+    def add(s, body=None):
+        pads = s.get("landingPads") or {}
+        market = s.get("market") or {}
+        out.append({
+            "market_id": s.get("id"),
+            "station": s.get("name"),
+            "type": s.get("type"),
+            "body": body,
+            "dist_ls": s.get("distanceToArrival"),
+            "pads": {"l": pads.get("large", 0), "m": pads.get("medium", 0), "s": pads.get("small", 0)},
+            "economy": s.get("primaryEconomy"),
+            "government": s.get("government"),
+            "faction": s.get("controllingFaction"),
+            "allegiance": s.get("allegiance"),
+            "services": [sv for sv in KEY_SERVICES if sv in (s.get("services") or [])],
+            "has_market": bool(market.get("commodities")),
+            "updated": market.get("updateTime") or s.get("updateTime"),
+        })
+
+    for s in system.get("stations") or []:
+        add(s)
+    for b in system.get("bodies") or []:
+        for s in b.get("stations") or []:
+            add(s, body=b.get("name"))
+    out.sort(key=lambda s: (s["dist_ls"] is None, s["dist_ls"] or 0))
+    return out
+
+
+def system_stations(id64):
+    """Station facts for a system from the Spansh dump, cached briefly.
+    Best-effort: returns [] when the system is unknown to Spansh."""
+    if not id64:
+        return []
+    import time as _time
+
+    cached = _station_dump_cache.get(id64)
+    if cached and _time.time() - cached[0] < _STATION_DUMP_TTL:
+        return cached[1]
+    try:
+        resp = requests.get(f"{BASE}/dump/{int(id64)}", headers=HEADERS, timeout=SUBMIT_TIMEOUT)
+        if resp.status_code != 200:
+            return []
+        stations = _parse_dump_stations(resp.json().get("system") or {})
+    except (requests.RequestException, ValueError, TypeError):
+        return []
+    _station_dump_cache[id64] = (_time.time(), stations)
+    return stations
+
+
 def plan_route(
     system,
     station=None,

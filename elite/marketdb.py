@@ -351,6 +351,51 @@ def price_history(market_id, days=HISTORY_KEEP_DAYS):
     return out
 
 
+def system_station_markets(conn, system_name):
+    """{market_id: updated_at} for the stations of one system in the local DB."""
+    system = find_system(conn, system_name)
+    if not system:
+        return {}
+    rows = conn.execute(
+        "SELECT market_id, updated_at FROM stations WHERE system_id64 = ?", (system[0],)
+    ).fetchall()
+    return {mid: upd for mid, upd in rows}
+
+
+def station_market(market_id):
+    """Full commodity table for one station from the local DB (seed + EDDN),
+    with display names and categories."""
+    if not market_id:
+        return None
+    conn = connect()
+    try:
+        st = conn.execute(
+            "SELECT name, updated_at FROM stations WHERE market_id = ?", (market_id,)
+        ).fetchone()
+        rows = conn.execute(
+            """SELECT c.symbol, COALESCE(n.name, c.symbol), COALESCE(n.category, ''),
+                      c.buy_price, c.sell_price, c.supply, c.demand
+               FROM commodities c LEFT JOIN commodity_names n ON n.symbol = c.symbol
+               WHERE c.market_id = ?
+               ORDER BY COALESCE(n.category, ''), COALESCE(n.name, c.symbol)""",
+            (market_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    if not st:
+        return None
+    return {
+        "market_id": market_id,
+        "station": st[0],
+        "updated_at": st[1],
+        "items": [
+            {"symbol": sym, "name": name, "category": cat,
+             "buy": buy, "sell": sell, "stock": supply, "demand": demand}
+            for sym, name, cat, buy, sell, supply, demand in rows
+        ],
+    }
+
+
 def station_prices(market_id):
     """Last-known sell/buy per commodity symbol for one station, from the local
     DB (seed + EDDN). Used to show price trend vs the live station market."""

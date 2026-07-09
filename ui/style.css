@@ -433,6 +433,26 @@ td .sub { color: var(--dim); font-size: 11px; }
 .stack-sub { margin-top: 3px; font-size: 12px; }
 .stack-sub.good { color: var(--good); font-weight: 600; }
 
+/* system stations */
+.sst { border-top: 1px solid var(--border); padding: 9px 0; }
+.sst:first-child { border-top: none; }
+.sst-line { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.sst-line b { font-size: 15px; }
+.sst-line .copy { margin-left: auto; }
+.sst-facts { font-size: 12.5px; }
+.sst-services { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.chip {
+  font-size: 10.5px;
+  letter-spacing: .5px;
+  color: var(--orange-soft);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.sst-market { margin-top: 8px; }
+.sst-updated { font-size: 11.5px; margin-top: 4px; }
+
 /* engineering planner */
 .engplan { margin-top: 12px; }
 .engplan.done .stack-bar > div { background: var(--good); }

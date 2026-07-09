@@ -199,6 +199,40 @@ def create_app(state):
         return jsonify({"reference": ref, "systems": systems, "genera": genera,
                         "total_value": total, "relaxed": relaxed})
 
+    @app.get("/api/system-stations")
+    def api_system_stations():
+        """Stations of a system: Spansh station facts (services, economy,
+        pads) merged with local-DB market freshness."""
+        snap = state.snapshot()
+        name = (request.args.get("system") or snap.get("system") or "").strip()
+        if not name:
+            return jsonify({"error": "No system known yet."}), 400
+        conn = marketdb.connect()
+        try:
+            row = marketdb.find_system(conn, name)
+            local = marketdb.system_station_markets(conn, name)
+        finally:
+            conn.close()
+        id64 = row[0] if row else (
+            state.system_address if name == snap.get("system") else None
+        )
+        stations = spansh.system_stations(id64)
+        for s in stations:
+            s["local_market"] = s.get("market_id") in local
+            if s.get("market_id") in local:
+                s["market_updated"] = local[s["market_id"]]
+        if not stations and not local:
+            return jsonify({"system": name, "stations": [],
+                            "note": "No stations known for this system."})
+        return jsonify({"system": name, "stations": stations})
+
+    @app.get("/api/station-market")
+    def api_station_market():
+        market = marketdb.station_market(request.args.get("market_id", type=int))
+        if not market:
+            return jsonify({"error": "No local market data for this station yet."}), 404
+        return jsonify(market)
+
     @app.get("/api/engineering")
     def api_engineering():
         """Blueprint catalog + deficit plans for the pinned ones."""

@@ -802,6 +802,92 @@ function renderMissions(missions) {
   }
 }
 
+/* ---------- system stations (facts + per-station market) ---------- */
+
+async function loadSystemStations(ev) {
+  if (ev) ev.preventDefault();
+  const status = $("ss-status"), list = $("ss-list"), go = $("ss-go");
+  const sys = $("ss-system").value.trim() || (state && state.system) || "";
+  go.disabled = true;
+  status.classList.remove("error");
+  status.textContent = "Fetching stations… (~2–5s)";
+  list.innerHTML = "";
+  try {
+    const resp = await fetch("/api/system-stations?system=" + encodeURIComponent(sys));
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Lookup failed");
+    const sts = data.stations || [];
+    status.textContent = sts.length
+      ? `${sts.length} station${sts.length === 1 ? "" : "s"} in ${data.system}`
+      : (data.note || "No stations known for this system.");
+    for (const s of sts) list.appendChild(stationRow(s));
+  } catch (err) {
+    status.classList.add("error");
+    status.textContent = String(err.message || err);
+  } finally {
+    go.disabled = false;
+  }
+}
+
+function stationRow(s) {
+  const div = document.createElement("div");
+  div.className = "sst";
+  const pads = s.pads && (s.pads.l || s.pads.m || s.pads.s)
+    ? `pads L${s.pads.l}/M${s.pads.m}/S${s.pads.s}` : null;
+  const facts = [
+    s.type, s.body ? "on " + s.body : null,
+    s.dist_ls != null ? fmtNum(Math.round(s.dist_ls)) + " ls" : null,
+    pads, s.economy, s.faction,
+  ].filter(Boolean);
+  div.innerHTML =
+    `<div class="sst-line"><b>${esc(s.station)}</b>` +
+    `<span class="dim sst-facts">${esc(facts.join(" · "))}</span></div>` +
+    ((s.services || []).length
+      ? `<div class="sst-services">${s.services.map((sv) => `<span class="chip">${esc(sv)}</span>`).join("")}</div>` : "") +
+    `<div class="sst-market hidden"></div>`;
+  const line = div.querySelector(".sst-line");
+  if (s.local_market) {
+    const btn = document.createElement("button");
+    btn.className = "copy";
+    btn.textContent = "▤ MARKET";
+    btn.title = "This station's commodity market from your local database (EDDN-fresh)";
+    btn.addEventListener("click", () => toggleStationMarket(div, s.market_id, btn));
+    line.appendChild(btn);
+  }
+  return div;
+}
+
+async function toggleStationMarket(div, marketId, btn) {
+  const box = div.querySelector(".sst-market");
+  if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+  if (!box.dataset.loaded) {
+    btn.disabled = true;
+    try {
+      const resp = await fetch("/api/station-market?market_id=" + marketId);
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "No market data");
+      const rows = (data.items || []).map((i) =>
+        `<tr><td>${esc(i.name)}<div class="sub">${esc(i.category)}</div></td>` +
+        `<td class="num">${i.sell ? i.sell.toLocaleString() : "—"}</td>` +
+        `<td class="num">${i.buy ? i.buy.toLocaleString() : "—"}</td>` +
+        `<td class="num">${i.demand ? i.demand.toLocaleString() : "—"}</td>` +
+        `<td class="num">${i.stock ? i.stock.toLocaleString() : "—"}</td></tr>`).join("");
+      box.innerHTML =
+        `<div class="table-wrap"><table><thead><tr><th>Commodity</th>` +
+        `<th class="num">Sell</th><th class="num">Buy</th><th class="num">Demand</th><th class="num">Stock</th></tr></thead>` +
+        `<tbody>${rows}</tbody></table></div>` +
+        `<div class="dim sst-updated">${(data.items || []).length} commodities · prices as of ` +
+        `${data.updated_at ? new Date(data.updated_at * 1000).toLocaleString() : "?"}</div>`;
+      box.dataset.loaded = "1";
+    } catch (err) {
+      box.innerHTML = `<div class="dim">${esc(String(err.message || err))}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  box.classList.remove("hidden");
+}
+
 /* ---------- combat: massacre stacks ---------- */
 
 function renderMassacre() {
@@ -2790,6 +2876,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("ep-traders").addEventListener("click", findTraders);
   loadEngineering();
+  $("ss-form").addEventListener("submit", loadSystemStations);
 
   $("notes-close").addEventListener("click", () => $("notes-modal").classList.add("hidden"));
   $("notes-modal").addEventListener("click", (ev) => {
