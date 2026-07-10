@@ -132,7 +132,9 @@ function speak(text, force) {
   if (neuralVoiceEnabled()) {
     try {
       if (calloutAudio) calloutAudio.pause();  // don't stack stale callouts
-      calloutAudio = new Audio("/api/speak?text=" + encodeURIComponent(text));
+      // Cache-buster: same phrase + different active voice = same URL, and
+      // Chromium's media cache will happily replay the old voice otherwise.
+      calloutAudio = new Audio("/api/speak?text=" + encodeURIComponent(text) + "&r=" + Date.now());
       calloutAudio.play().catch(() => speakBrowser(text));
       return;
     } catch (e) { /* fall through to the browser voice */ }

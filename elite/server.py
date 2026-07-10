@@ -360,7 +360,12 @@ def create_app(state):
             wav = tts.synthesize(request.args.get("text", ""))
         except tts.TTSError as exc:
             return error_response(exc, 409)
-        return send_file(wav, mimetype="audio/wav", max_age=86400)
+        # The URL doesn't encode which voice is active, so the browser must
+        # never cache it — a voice switch would keep replaying the old voice.
+        # (The server's per-voice WAV cache already makes repeats instant.)
+        resp = send_file(wav, mimetype="audio/wav")
+        resp.cache_control.no_store = True
+        return resp
 
     @app.get("/api/price-history")
     def api_price_history():
