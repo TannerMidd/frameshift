@@ -3015,6 +3015,32 @@ function buildTtsSetting() {
     wrap.innerHTML = "";
     const txt = document.createElement("div");
     txt.className = "setting-text";
+
+    // Voice picker: switching to an installed voice is instant; picking a new
+    // one downloads it (~60-115 MB) and activates when done. Server-wide —
+    // synthesis happens on the PC, every device hears the chosen voice.
+    const sel = document.createElement("select");
+    sel.className = "tts-voices";
+    for (const v of (st && st.voices) || []) {
+      const opt = document.createElement("option");
+      opt.value = v.name;
+      opt.textContent = `${v.label} ${v.installed ? "· installed" : `· ~${v.mb} MB download`}`;
+      opt.selected = st && st.voice === v.name;
+      sel.appendChild(opt);
+    }
+    sel.disabled = !!(st && (st.downloading || st.supported === false));
+    sel.addEventListener("change", async () => {
+      sel.disabled = true;
+      try {
+        await fetch("/api/tts/voice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ voice: sel.value }),
+        });
+      } catch (e) { /* status poll shows the outcome */ }
+      loadTtsStatus().then(render);
+    });
+
     if (st && st.ready) {
       const row = document.createElement("label");
       row.className = "setting";
@@ -3024,15 +3050,15 @@ function buildTtsSetting() {
       cb.addEventListener("change", () => localStorage.setItem("neuralVoice", cb.checked ? "1" : "0"));
       const sw = document.createElement("span");
       sw.className = "switch";
-      txt.innerHTML = "<b>Neural voice</b><div class=\"dim\">Human-sounding callouts, synthesized " +
-        "on this PC by Piper (voice: British · \"Cori\"). This switch is per device; untick for the browser voice.</div>";
+      txt.innerHTML = "<b>Neural voice</b><div class=\"dim\">Human-sounding callouts, synthesized on " +
+        "this PC by Piper. The voice is shared by every device; the on/off switch is per device.</div>";
       row.append(cb, sw, txt);
       const test = document.createElement("button");
       test.className = "primary small";
       test.textContent = "TEST";
       test.title = "Play a sample callout with the neural voice";
       test.addEventListener("click", () => speak("Neural voice online. All systems nominal. o7", true));
-      wrap.append(row, test);
+      wrap.append(row, sel, test);
       return;
     }
     const row = document.createElement("div");
@@ -3046,7 +3072,7 @@ function buildTtsSetting() {
     }
     txt.innerHTML = "<b>Neural voice</b><div class=\"dim\">Replace the robotic browser voice with a " +
       "human-sounding one, synthesized locally on this PC — every device on your LAN hears it. " +
-      "One-time ~137 MB download (Piper TTS + a British voice model), fully offline afterwards." +
+      "One-time download (Piper TTS + the voice you pick), fully offline afterwards." +
       (st && st.error ? ` <span class="bad-text">${esc(st.error)}</span>` : "") +
       (st && st.supported === false ? " Not available on this platform." : "") + "</div>";
     row.appendChild(txt);
@@ -3061,7 +3087,7 @@ function buildTtsSetting() {
       } catch (e) { /* status poll shows the outcome */ }
       loadTtsStatus().then(render);
     });
-    wrap.append(row, btn);
+    wrap.append(row, sel, btn);
   };
   loadTtsStatus().then(render);
   return wrap;

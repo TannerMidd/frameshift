@@ -343,6 +343,16 @@ def create_app(state):
             return error_response(exc, 400)
         return jsonify(tts.status())
 
+    @app.post("/api/tts/voice")
+    def api_tts_voice():
+        """Switch the callout voice (kicks off its download when needed)."""
+        body = request.get_json(silent=True) or {}
+        try:
+            tts.set_voice(body.get("voice") or "")
+        except tts.TTSError as exc:
+            return error_response(exc, 400)
+        return jsonify(tts.status())
+
     @app.get("/api/speak")
     def api_speak():
         """Synthesize a callout with the local neural voice (cached WAVs)."""

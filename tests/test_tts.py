@@ -9,11 +9,24 @@ from elite.errors import UserFacingError
 from elite.server import create_app
 from elite.state import AppState
 
-# Every downloaded artifact is pinned to a SHA-256.
-for url, dest, sha in tts._artifacts():
+# Every downloadable artifact — the binary and every catalog voice — is
+# pinned to a SHA-256, so the endpoints can only ever fetch these files.
+artifacts = [tts._binary_artifact()]
+for name in tts.VOICES:
+    artifacts += tts._voice_artifacts(name)
+for url, dest, sha in artifacts:
     assert url.startswith("https://"), url
     assert len(sha) == 64 and all(c in "0123456789abcdef" for c in sha), (url, sha)
 assert issubclass(tts.TTSError, UserFacingError)
+assert tts.DEFAULT_VOICE in tts.VOICES
+assert tts.active_voice() in tts.VOICES
+
+# Unknown voices are rejected before touching settings or the network.
+try:
+    tts.set_voice("evil-voice-name")
+    raise AssertionError("expected TTSError")
+except tts.TTSError:
+    pass
 
 # Not installed -> player-facing error, no crash.
 real_ready = tts.ready

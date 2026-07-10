@@ -775,10 +775,22 @@ td .sub { color: var(--dim); font-size: 11px; }
 }
 .setting:hover { background: rgba(255, 255, 255, .03); }
 /* Neural-voice row: a normal setting plus a side button (TEST / DOWNLOAD) */
-.tts-wrap { display: flex; align-items: flex-start; gap: 10px; }
-.tts-wrap .setting { flex: 1; }
+.tts-wrap { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.tts-wrap .setting { flex: 1; min-width: 260px; }
 .tts-wrap .setting.tts-static { cursor: default; }
 .tts-wrap > button { flex: none; margin-top: 12px; }
+.tts-voices {
+  flex: none;
+  margin-top: 12px;
+  max-width: 300px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+}
 .bad-text { color: var(--bad); }
 .setting.saved { background: rgba(111, 191, 115, .1); }
 .setting.disabled { opacity: .5; cursor: default; }
