@@ -4,10 +4,10 @@ import logging
 import threading
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_file, send_from_directory
 from werkzeug.serving import make_server
 
-from . import alerts, biovalues, launcher, links, marketdb, routes, settings, spansh
+from . import alerts, biovalues, launcher, links, marketdb, routes, settings, spansh, tts
 from .eddn import LISTENER
 from .errors import UserFacingError
 from .seed import SEEDER
@@ -330,6 +330,27 @@ def create_app(state):
         except OSError as exc:  # protocol handler missing / launcher refused
             return error_response(exc, 502)
         return jsonify({"ok": True, "via": via})
+
+    @app.get("/api/tts/status")
+    def api_tts_status():
+        return jsonify(tts.status())
+
+    @app.post("/api/tts/download")
+    def api_tts_download():
+        try:
+            tts.start_download()
+        except tts.TTSError as exc:
+            return error_response(exc, 400)
+        return jsonify(tts.status())
+
+    @app.get("/api/speak")
+    def api_speak():
+        """Synthesize a callout with the local neural voice (cached WAVs)."""
+        try:
+            wav = tts.synthesize(request.args.get("text", ""))
+        except tts.TTSError as exc:
+            return error_response(exc, 409)
+        return send_file(wav, mimetype="audio/wav", max_age=86400)
 
     @app.get("/api/price-history")
     def api_price_history():

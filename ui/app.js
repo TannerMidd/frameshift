@@ -120,8 +120,28 @@ async function plotSystem(system) {
 
 let voiceOn = localStorage.getItem("voice") === "1";
 
+/* Neural voice (Piper on the server): set by /api/tts/status. When ready and
+   enabled on this device, callouts play server-synthesized audio — every
+   device hears the same human-sounding voice. Browser TTS is the fallback. */
+let ttsReady = false;
+const neuralVoiceEnabled = () => ttsReady && localStorage.getItem("neuralVoice") !== "0";
+let calloutAudio = null;
+
 function speak(text, force) {
-  if ((!voiceOn && !force) || !("speechSynthesis" in window) || !text) return;
+  if ((!voiceOn && !force) || !text) return;
+  if (neuralVoiceEnabled()) {
+    try {
+      if (calloutAudio) calloutAudio.pause();  // don't stack stale callouts
+      calloutAudio = new Audio("/api/speak?text=" + encodeURIComponent(text));
+      calloutAudio.play().catch(() => speakBrowser(text));
+      return;
+    } catch (e) { /* fall through to the browser voice */ }
+  }
+  speakBrowser(text);
+}
+
+function speakBrowser(text) {
+  if (!("speechSynthesis" in window)) return;
   try {
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 1.05;
@@ -129,6 +149,18 @@ function speak(text, force) {
     window.speechSynthesis.cancel();  // don't queue stale callouts
     window.speechSynthesis.speak(u);
   } catch (e) { /* speech is a nicety */ }
+}
+
+async function loadTtsStatus() {
+  try {
+    const resp = await fetch("/api/tts/status", { cache: "no-store" });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    ttsReady = !!data.ready;
+    return data;
+  } catch (e) {
+    return null;
+  }
 }
 
 function setVoice(on, announce) {
@@ -2974,10 +3006,72 @@ function buildCrtSetting() {
   return row;
 }
 
+/* Neural voice setting: download-once server feature (like the market DB),
+   plus a per-device on/off once installed. */
+function buildTtsSetting() {
+  const wrap = document.createElement("div");
+  wrap.className = "tts-wrap";
+  const render = (st) => {
+    wrap.innerHTML = "";
+    const txt = document.createElement("div");
+    txt.className = "setting-text";
+    if (st && st.ready) {
+      const row = document.createElement("label");
+      row.className = "setting";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = localStorage.getItem("neuralVoice") !== "0";
+      cb.addEventListener("change", () => localStorage.setItem("neuralVoice", cb.checked ? "1" : "0"));
+      const sw = document.createElement("span");
+      sw.className = "switch";
+      txt.innerHTML = "<b>Neural voice</b><div class=\"dim\">Human-sounding callouts, synthesized " +
+        "on this PC by Piper (voice: British · \"Cori\"). This switch is per device; untick for the browser voice.</div>";
+      row.append(cb, sw, txt);
+      const test = document.createElement("button");
+      test.className = "primary small";
+      test.textContent = "TEST";
+      test.title = "Play a sample callout with the neural voice";
+      test.addEventListener("click", () => speak("Neural voice online. All systems nominal. o7", true));
+      wrap.append(row, test);
+      return;
+    }
+    const row = document.createElement("div");
+    row.className = "setting tts-static";
+    if (st && st.downloading) {
+      txt.innerHTML = `<b>Neural voice</b><div class="dim">Downloading the voice… ${Math.round((st.progress || 0) * 100)}% — callouts switch over automatically when it finishes.</div>`;
+      row.appendChild(txt);
+      wrap.appendChild(row);
+      setTimeout(() => loadTtsStatus().then(render), 2000);
+      return;
+    }
+    txt.innerHTML = "<b>Neural voice</b><div class=\"dim\">Replace the robotic browser voice with a " +
+      "human-sounding one, synthesized locally on this PC — every device on your LAN hears it. " +
+      "One-time ~137 MB download (Piper TTS + a British voice model), fully offline afterwards." +
+      (st && st.error ? ` <span class="bad-text">${esc(st.error)}</span>` : "") +
+      (st && st.supported === false ? " Not available on this platform." : "") + "</div>";
+    row.appendChild(txt);
+    const btn = document.createElement("button");
+    btn.className = "primary small";
+    btn.textContent = "DOWNLOAD VOICE";
+    btn.disabled = !!(st && st.supported === false);
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await fetch("/api/tts/download", { method: "POST" });
+      } catch (e) { /* status poll shows the outcome */ }
+      loadTtsStatus().then(render);
+    });
+    wrap.append(row, btn);
+  };
+  loadTtsStatus().then(render);
+  return wrap;
+}
+
 function renderSettings(values, info) {
   const list = $("settings-list");
   if (!list) return;
   list.innerHTML = "";
+  list.appendChild(buildTtsSetting());
   list.appendChild(buildCrtSetting());
   for (const def of SETTINGS_DEFS) {
     const supported = !def.requires || info[def.requires];
@@ -3258,6 +3352,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("an-days").addEventListener("change", loadAnalytics);
 
   renderRouteProgress();  // show a persisted route immediately, before first poll
+  loadTtsStatus();        // arms the neural voice for callouts if it's installed
   poll();
   pollDbStatus();
   pollAlerts();

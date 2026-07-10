@@ -774,6 +774,12 @@ td .sub { color: var(--dim); font-size: 11px; }
   transition: background .15s;
 }
 .setting:hover { background: rgba(255, 255, 255, .03); }
+/* Neural-voice row: a normal setting plus a side button (TEST / DOWNLOAD) */
+.tts-wrap { display: flex; align-items: flex-start; gap: 10px; }
+.tts-wrap .setting { flex: 1; }
+.tts-wrap .setting.tts-static { cursor: default; }
+.tts-wrap > button { flex: none; margin-top: 12px; }
+.bad-text { color: var(--bad); }
 .setting.saved { background: rgba(111, 191, 115, .1); }
 .setting.disabled { opacity: .5; cursor: default; }
 .setting > input { display: none; }
