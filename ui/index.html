@@ -27,6 +27,7 @@
 <div id="flight-toast" class="flight-toast hidden"></div>
 <div id="alert-strip" class="alert-strip hidden"></div>
 <div id="update-banner" class="update-banner hidden"></div>
+<div id="setup-banner" class="update-banner setup-banner hidden"></div>
 
 <div id="notes-modal" class="notes-modal hidden" role="dialog" aria-modal="true" aria-labelledby="notes-title">
   <div class="notes-box">
@@ -159,7 +160,7 @@
     <button data-page="analytics"><span class="fp-ni" aria-hidden="true">∿</span><span class="fp-nl">STATS</span></button>
     <button data-page="engineering"><span class="fp-ni" aria-hidden="true">⌬</span><span class="fp-nl">ENG</span></button>
     <button data-page="local"><span class="fp-ni" aria-hidden="true">⌖</span><span class="fp-nl">LOCAL</span></button>
-    <button data-page="database"><span class="fp-ni" aria-hidden="true">▤</span><span class="fp-nl">DB</span></button>
+    <button data-page="database"><span class="fp-ni" aria-hidden="true">⚙&#xFE0E;</span><span class="fp-nl">SETTINGS</span></button>
   </div>
   <div class="fp-nav-foot">
     <button id="fp-voice" class="fp-railbtn" aria-pressed="false" title="Speak callouts (fuel scooping, low fuel, interdiction, hull damage, first discovery, waypoints)">🔊 VOICE</button>
@@ -214,7 +215,7 @@
     <button class="tab" data-tab="analytics">ANALYTICS</button>
     <button class="tab" data-tab="engineering">ENGINEERING</button>
     <button class="tab" data-tab="local">LOCAL</button>
-    <button class="tab" data-tab="database">DATABASE</button>
+    <button class="tab" data-tab="database">⚙&#xFE0E; SETTINGS</button>
     <button class="tab-arrange" id="arrange-btn" title="Customize this page: drag cards to reorder, ⊘ hides cards you don't use. Saved on this device." aria-pressed="false">⇅ ARRANGE</button>
   </nav>
 
@@ -747,19 +748,19 @@
   </div>
 
   <div class="tabpane hidden" id="tab-database">
-    <section class="card" data-arr="marketdb">
-      <div class="card-head">
-        <div class="label">MARKET DATABASE <span class="dim">local trade data · seeded from Spansh dump · live-updated by EDDN</span></div>
-        <button id="seed-btn" class="primary small">BUILD DATABASE (~3.9 GB download)</button>
-      </div>
-      <div id="db-status" class="dim">Checking…</div>
-      <div class="seedbar hidden" id="seed-bar"><div id="seed-fill"></div></div>
-    </section>
-
     <section class="card" id="settings-card" data-arr="settings">
       <div class="label">SETTINGS <span class="dim">saved on this machine · changes take effect immediately</span></div>
       <div id="settings-list" class="settings-list"></div>
       <div id="settings-info" class="dim settings-info"></div>
+    </section>
+
+    <section class="card" data-arr="marketdb">
+      <div class="card-head">
+        <div class="label">MARKET DATABASE <span class="dim">powers trade routes, commodity search &amp; mining · seeded from the Spansh dump, then live-updated by EDDN</span></div>
+        <button id="seed-btn" class="primary small">BUILD DATABASE (~3.9 GB download)</button>
+      </div>
+      <div id="db-status" class="dim">Checking…</div>
+      <div class="seedbar hidden" id="seed-bar"><div id="seed-fill"></div></div>
     </section>
   </div>
 </main>

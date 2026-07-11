@@ -1,45 +1,34 @@
-## Elite Trader v1.15.0 — every commander's cockpit
+## Elite Trader v1.16.0 — your colors, your cockpit
 
-This one is about serving every stage of the game — from your first engineer
-invite to fleet-carrier logistics — without burying anyone in cards they
-don't use. You choose what your screens show.
+Commanders re-color their in-game HUD — now the companion follows suit. Plus
+a clearer home for settings and a proper welcome for first-time installs.
 
-### 🎛 Make it yours
-- **Hide any card, on any page.** ⇅ ARRANGE now customizes as well as
-  reorders: every card gets a **⊘ HIDE** button, hidden cards dim while
-  arranging (**⊕ SHOW** brings them back) and disappear afterwards. Saved
-  per device — a lean tablet cockpit and a kitchen-sink desktop can coexist.
-- **New 🔧 ENGINEERING page.** Everything about upgrading your gear —
-  engineers, materials, Odyssey locker, blueprint planner — moved off the
-  (very long) Local page into its own tab, on desktop and in the flight
-  panel's rail alike. Any layout choices you'd made follow automatically.
+### 🎨 Color themes
+- **Six presets + custom.** Settings → Color theme: Elite Orange (default),
+  Ice Blue, Emerald, Gold, Crimson, Violet — or pick any color with the
+  Custom swatch. The whole interface follows: tabs, buttons, gauges,
+  banners, charts, the flight-panel glow, even the ignition button.
+- Only the **accent** changes — the dark cockpit background and the
+  green/red status colors stay put, so every theme remains readable.
+- Saved **per device**: run Ice Blue on the tablet and keep the desktop
+  orange.
 
-### 🧑‍🔬 Engineers
-- **Engineer tracker** — everyone the game knows about, grouped
-  *Unlocked* (with grade pips), *Invited* (go visit — one tap plots the
-  trip) and *Known*, each with home system and what they upgrade. Unlock
-  requirements link to Inara, where they're kept current.
+### ⚙ Settings, where you'd look for it
+- The **DB tab is now ⚙ SETTINGS** — same page, honest name, gear icon on
+  the desktop tabs and the flight-panel rail alike. The Settings card now
+  sits first, with the Market Database card (which still powers the trade
+  engine) right below.
 
-### 🚀 Fleet
-- **Your Ships** — the whole fleet from your last shipyard visit: where
-  each ship is parked, its value, transfer cost and time, and a ⚠ HOT flag
-  for wanted hulls.
-- **Fleet Carrier panel** — tritium gauge, balance, free space, and the
-  scheduled jump with a countdown. Appears only if you own one; costs
-  everyone else nothing.
+### ⚑ No more guessing on first launch
+- Fresh installs get a **first-time setup banner**: build the local market
+  database to unlock trade loops, commodity search and mining — with a
+  TAKE ME THERE button that lands you on the build button, a plain-words
+  note about the one-time ~3.9 GB download, and a ✕ that dismisses it for
+  good on that device. It stays quiet while a build is running and
+  disappears once the database exists.
 
-### 🥾 Odyssey
-- **On-foot locker** — goods, assets, data and consumables from
-  ShipLocker.json, ready for bartender trades and suit/weapon engineering.
-  Hidden automatically for Horizons-only commanders.
-
-### ☄ Neutron pre-flight check
-- The neutron plotter now states your tank's jump budget and flags
-  **⚠ dry legs** — waypoint legs that would drain a full tank — before you
-  commit. Neutron stars can't be scooped; now the plot says so up front.
-
-### 🛠 Fixes & polish
-- Ship names render in game style — "Krait Mk II", not "Krait Mkii".
-- Nine flight-panel pages fit short tablets — the DB rail entry no longer
-  clips off-screen at 768px.
-- Durations longer than two days read as "3d 4h" instead of "76h".
+### 🛠 Fixes
+- The **LAUNCH ELITE DANGEROUS** button (and the whole launch-control
+  banner, including the ignition crawl and the status-strip sweep) now
+  follows the color theme instead of staying orange.
+- Empty-database error messages point at the renamed Settings page.

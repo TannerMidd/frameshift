@@ -87,7 +87,7 @@ Frontier Developments plc.
 - **Flight panel**: the default view — a touch-first cockpit display for a mounted tablet, with a nav rail, a persistent status strip, swipe navigation, one-tap best-loop and optional fullscreen. (✕ EXIT switches to the classic desktop layout.)
 - **Voice callouts** for what actually matters: *fuel-scoop warnings along your plotted route* (never strand in a dry stretch again), interdictions, hull damage, first discoveries, rebuy coverage, data-at-risk, waypoints. A human-sounding **neural voice** (Piper TTS, synthesized locally) is the default once its one-time download is done — six voices to pick from, volume and sizing dials in Settings.
 - **Game launch control** — when Elite isn't running, the panel says so and a ▲ LAUNCH button starts it on your PC (works from the tablet).
-- **Make it yours** — drag cards to reorder any page, **hide the ones you don't use**; layouts saved per device, so the tablet stays lean while the desktop shows everything.
+- **Make it yours** — drag cards to reorder any page, **hide the ones you don't use**, and pick a **color theme** (six presets or any custom accent) to match your in-game HUD; all saved per device, so the tablet stays lean while the desktop shows everything.
 - **Fleet at a glance** — stored ships (location, value, transfer cost) and a **fleet-carrier panel** (tritium, balance, scheduled jump) that only appears if you own one.
 - **Autoplot (Windows)** — ◎ plots the route in the game itself using your own keybinds, verified against `NavRoute.json`. [wiki](../../wiki/Autoplot)
 
@@ -115,8 +115,9 @@ browser. Proton journals are auto-detected. [Details →](../../wiki/Getting-Sta
 Then:
 1. **Play** — journal detection is automatic (relocated Saved Games included);
    if anything's off, **Settings → Journal folder** validates as you type.
-2. **Database tab → Build Database** (once, ~15 min) — every station market in
-   the galaxy, then kept fresh in real time by EDDN. [How it works →](../../wiki/Market-Database)
+2. **⚙ Settings → Build Database** (once, ~15 min) — every station market in
+   the galaxy, then kept fresh in real time by EDDN; a first-run banner
+   points you there. [How it works →](../../wiki/Market-Database)
 3. **Open the LAN URL on a tablet** — it starts in the flight panel; tap **⛶ FULL** for fullscreen.
 
 ## Good to know

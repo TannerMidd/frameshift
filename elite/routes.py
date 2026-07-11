@@ -72,7 +72,7 @@ def plan_route_local(
     conn = marketdb.connect()
     try:
         if not marketdb.is_ready(conn):
-            raise RouteError("Local market database is empty - build it from the Market Database panel first.")
+            raise RouteError("Local market database is empty - build it from the Settings page (Market Database card) first.")
 
         start = _resolve_start(conn, system, star_pos)
         min_updated = marketdb.now_epoch() - int(max_price_age_days) * 86400
@@ -251,7 +251,7 @@ def plan_loops(
     conn = marketdb.connect()
     try:
         if not marketdb.is_ready(conn):
-            raise RouteError("Local market database is empty - build it from the Market Database panel first.")
+            raise RouteError("Local market database is empty - build it from the Settings page (Market Database card) first.")
         start = _resolve_start(conn, system, star_pos)
 
         stations = marketdb.stations_near(
@@ -422,7 +422,7 @@ def search_commodity(
     conn = marketdb.connect()
     try:
         if not marketdb.is_ready(conn):
-            raise RouteError("Local market database is empty - build it from the Market Database panel first.")
+            raise RouteError("Local market database is empty - build it from the Settings page (Market Database card) first.")
         symbol, display = _resolve_commodity(conn, query)
         start = _resolve_start(conn, system, star_pos)
 
@@ -488,7 +488,7 @@ def sell_cargo(
     conn = marketdb.connect()
     try:
         if not marketdb.is_ready(conn):
-            raise RouteError("Local market database is empty - build it from the Database tab first.")
+            raise RouteError("Local market database is empty - build it from the Settings page (Market Database card) first.")
         start = _resolve_start(conn, system, star_pos)
         stations = marketdb.stations_near(
             conn, start["x"], start["y"], start["z"], float(radius),
@@ -570,7 +570,7 @@ def mining_advisor(
     conn = marketdb.connect()
     try:
         if not marketdb.is_ready(conn):
-            raise RouteError("Local market database is empty - build it from the Database tab first.")
+            raise RouteError("Local market database is empty - build it from the Settings page (Market Database card) first.")
         start = _resolve_start(conn, system, star_pos)
         stations = marketdb.stations_near(
             conn, start["x"], start["y"], start["z"], float(radius),

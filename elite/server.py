@@ -78,7 +78,7 @@ def create_app(state):
         if mode == "loop":
             if source != "local":
                 return jsonify({
-                    "error": "Loop routes need the local market database - build it from the Market Database panel.",
+                    "error": "Loop routes need the local market database - build it from the Settings page (Market Database card).",
                     "source": source,
                 }), 502
             try:

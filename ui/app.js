@@ -3070,9 +3070,9 @@ function drawBalanceChart(svg, points) {
       .textContent = shortCr(v);
   }
   const d = points.map((p, i) => `${i ? "L" : "M"}${x(p.ts).toFixed(1)},${y(p.balance).toFixed(1)}`).join("");
-  svgEl("path", { d, fill: "none", stroke: "#ff7100", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+  svgEl("path", { d, fill: "none", stroke: accentColor(), "stroke-width": 2, "stroke-linejoin": "round" }, svg);
   const last = points[points.length - 1];
-  svgEl("circle", { cx: x(last.ts), cy: y(last.balance), r: 3.5, fill: "#ff7100" }, svg);
+  svgEl("circle", { cx: x(last.ts), cy: y(last.balance), r: 3.5, fill: accentColor() }, svg);
   svgEl("text", { x: x(last.ts) + 8, y: y(last.balance) + 4, fill: "var(--text)", "font-size": 12, "font-weight": 600 }, svg)
     .textContent = shortCr(last.balance);
   for (const t of [t0, t1]) {
@@ -3209,7 +3209,49 @@ function nudgeDbStatus() {
   pollDbStatus();
 }
 
+/* First-run nudge: a fresh install works, but its best features (trade
+   loops, commodity search, mining, colonisation sourcing) need the local
+   market database. Until it's built — and unless dismissed — say so
+   plainly and point at the button, so setup is never a scavenger hunt. */
+function renderSetupBanner(s) {
+  const el = $("setup-banner");
+  if (!el) return;
+  const seeding = s.seeding || {};
+  const busy = seeding.phase === "downloading" || seeding.phase === "importing";
+  const show = !s.ready && !busy
+    && localStorage.getItem("dbSetupDismissed") !== "1"
+    && !(state && state.journal_dir_found === false);  // one problem at a time
+  el.classList.toggle("hidden", !show);
+  if (!show || el.dataset.built) return;
+  el.dataset.built = "1";
+  el.innerHTML =
+    `<span class="ub-badge">⚑ FIRST-TIME SETUP</span>` +
+    `<span class="ub-text">Build the <b>local market database</b> to unlock trade loops, commodity ` +
+    `search and mining <span class="dim">(one-time ~3.9 GB download, ~15 min — EDDN keeps it fresh afterwards)</span></span>`;
+  const go = document.createElement("button");
+  go.className = "ub-btn";
+  go.textContent = "TAKE ME THERE";
+  go.addEventListener("click", () => {
+    if (document.body.classList.contains("panel-mode")) setPanelPage("database");
+    else activateTab("database");
+    const btn = $("seed-btn");
+    if (btn) btn.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+  const dismiss = document.createElement("button");
+  dismiss.className = "ub-dismiss";
+  dismiss.textContent = "✕";
+  dismiss.title = "Hide this reminder on this device — you can build the database any time from the Settings page";
+  dismiss.setAttribute("aria-label", "Dismiss setup reminder");
+  dismiss.addEventListener("click", () => {
+    localStorage.setItem("dbSetupDismissed", "1");
+    el.classList.add("hidden");
+  });
+  el.appendChild(go);
+  el.appendChild(dismiss);
+}
+
 function renderDbStatus(s) {
+  renderSetupBanner(s);
   const el = $("db-status");
   const bar = $("seed-bar");
   const fill = $("seed-fill");
@@ -3449,6 +3491,105 @@ function applyCrtFx() {
   document.body.classList.toggle("crt-fx", localStorage.getItem("crtFx") === "1");
 }
 
+/* ---------- color themes (per device) ----------
+   Commanders re-color their in-game HUD; the companion should follow suit.
+   Only the ACCENT changes — the dark cockpit background and the semantic
+   good/bad colors stay, so every combination remains readable. */
+
+const THEME_PRESETS = {
+  elite:   { label: "Elite Orange", accent: "#ff7100", soft: "#ff9a40" },
+  ice:     { label: "Ice Blue",     accent: "#35a7ff", soft: "#7cc4ff" },
+  emerald: { label: "Emerald",      accent: "#2ecc71", soft: "#82e0aa" },
+  gold:    { label: "Gold",         accent: "#ffbf00", soft: "#ffd966" },
+  crimson: { label: "Crimson",      accent: "#ff4438", soft: "#ff8a80" },
+  violet:  { label: "Violet",       accent: "#a86bff", soft: "#c9a2ff" },
+};
+
+function hexToRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex || "").trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/* Custom accents need a lighter companion shade (labels, hovers): blend 35%
+   toward white, mirroring how the stock soft orange relates to the accent. */
+function softenAccent(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  return "#" + rgb.map((c) => Math.round(c + (255 - c) * 0.35))
+    .map((c) => c.toString(16).padStart(2, "0")).join("");
+}
+
+function currentTheme() {
+  return localStorage.getItem("accentTheme") || "elite";
+}
+
+function applyTheme() {
+  const t = currentTheme();
+  const preset = THEME_PRESETS[t];
+  const accent = preset ? preset.accent : (hexToRgb(t) ? t : THEME_PRESETS.elite.accent);
+  const soft = preset ? preset.soft : softenAccent(accent);
+  const root = document.documentElement.style;
+  root.setProperty("--orange", accent);
+  root.setProperty("--orange-soft", soft);
+  root.setProperty("--accent-rgb", hexToRgb(accent).join(", "));
+  root.setProperty("--accent-soft-rgb", hexToRgb(soft).join(", "));
+}
+
+/* Charts draw with the live accent (SVG attributes can't read CSS vars). */
+function accentColor() {
+  return getComputedStyle(document.documentElement).getPropertyValue("--orange").trim() || "#ff7100";
+}
+
+function buildThemeSetting() {
+  const wrap = document.createElement("div");
+  wrap.className = "setting setting-theme";
+  wrap.innerHTML =
+    `<div class="setting-text"><b>Color theme</b>` +
+    `<div class="dim">The accent color on this device — match your in-game HUD. ` +
+    `Presets are tuned for readability; Custom takes any color.</div></div>`;
+  const chips = document.createElement("div");
+  chips.className = "theme-chips";
+  const custom = document.createElement("label");
+  const customInput = document.createElement("input");
+  const syncActive = () => {
+    const t = currentTheme();
+    chips.querySelectorAll("[data-theme]").forEach((b) =>
+      b.classList.toggle("on", b.dataset.theme === t));
+    custom.classList.toggle("on", !THEME_PRESETS[t]);
+    custom.style.setProperty("--chip", !THEME_PRESETS[t] ? t : "#888");
+  };
+  for (const [id, p] of Object.entries(THEME_PRESETS)) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "theme-chip";
+    b.dataset.theme = id;
+    b.style.setProperty("--chip", p.accent);
+    b.innerHTML = `<span class="theme-dot" aria-hidden="true"></span>${p.label}`;
+    b.addEventListener("click", () => {
+      localStorage.setItem("accentTheme", id);
+      applyTheme();
+      syncActive();
+    });
+    chips.appendChild(b);
+  }
+  custom.className = "theme-chip theme-custom";
+  customInput.type = "color";
+  customInput.value = hexToRgb(currentTheme()) ? currentTheme() : THEME_PRESETS.elite.accent;
+  customInput.addEventListener("input", () => {
+    localStorage.setItem("accentTheme", customInput.value);
+    applyTheme();
+    syncActive();
+  });
+  custom.append(customInput);
+  custom.appendChild(document.createTextNode("Custom…"));
+  chips.appendChild(custom);
+  wrap.appendChild(chips);
+  syncActive();
+  return wrap;
+}
+
 /* Per-device size preferences: whole-app zoom plus finer dials for the two
    things squinted at most — the status strip and the small helper text. */
 const DISPLAY_DEFAULTS = { uiScale: 100, stripScale: 100, helperScale: 100, voiceVolume: 100 };
@@ -3648,6 +3789,7 @@ function renderSettings(values, info) {
   const list = $("settings-list");
   if (!list) return;
   list.innerHTML = "";
+  list.appendChild(buildThemeSetting());
   list.appendChild(buildTtsSetting());
   list.appendChild(buildVoiceVolumeSetting());
   list.appendChild(buildCrtSetting());
@@ -3853,6 +3995,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("fp-bestloop").addEventListener("click", findBestLoop);
   $("fp-voice").addEventListener("click", () => setVoice(!voiceOn, true));
   setVoice(voiceOn);  // reflect persisted state on the toggle (no speech yet)
+  applyTheme();
   applyCrtFx();
   applyDisplaySettings();
   $("fp-full").addEventListener("click", toggleFullscreen);
