@@ -1645,6 +1645,21 @@ body.panel-mode #fp-boot.hidden { display: none; }
   .fp-tiles-row { grid-template-columns: 1fr 1fr; }
   body.panel-mode .fp-arrange { bottom: 96px; }
 }
+/* Desktop-width panels: the 1280px column that suits a tablet strands the
+   status page in a sea of margin on a monitor. Widen the cap and let the
+   side stats fan out; everything stays fluid between the tiers. */
+@media (min-width: 1500px) {
+  #flight-panel { max-width: min(94vw, 1720px); gap: 20px; padding: 26px 34px 40px; }
+  .fp-grid { grid-template-columns: 1.2fr 1fr; gap: 26px; }
+  .fp-side .fp-tiles { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .fp-side .fp-tile-wide { grid-column: 1 / -1; }
+}
+@media (min-width: 2200px) {
+  #flight-panel { max-width: min(88vw, 2100px); }
+  .fp-gauges { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .fp-jumps { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+}
+
 .fp-loop-line {
   display: flex;
   align-items: center;
