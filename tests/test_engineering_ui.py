@@ -28,8 +28,10 @@ assert "ep-material-row" in css and "ep-wish-item" in css
 
 workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 batch = (ROOT / "build_exe.bat").read_text(encoding="utf-8")
-spec = (ROOT / "EliteTrader.spec").read_text(encoding="utf-8")
-for content in (workflow, batch, spec):
+# PyInstaller .spec files are generated local build artifacts and intentionally
+# ignored.  Validate the two versioned build entry points used by maintainers
+# and CI so this assertion also works in a clean checkout.
+for content in (workflow, batch):
     assert "engineering_catalog.json.gz" in content
     assert "THIRD_PARTY_NOTICES.md" in content
 ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
