@@ -417,11 +417,11 @@ class CombatTracker:
     def observe_event(self, event: dict, event_uid: str | None = None) -> dict:
         if not isinstance(event, dict) or event.get("event") not in JOURNAL_EVENTS:
             return self.snapshot()
-        state, changed = self.store.apply_event(event, self._reduce, event_uid)
-        if changed and event["event"] in {"Docked", "Shutdown", "Died"}:
-            summary = _present(state).get("session")
-            if summary:
-                self.store.archive(summary["session_key"], summary)
+        closing = event["event"] in {"Docked", "Shutdown", "Died"}
+        state, _changed = self.store.apply_event(
+            event, self._reduce, event_uid,
+            archive=(lambda value: _present(value).get("session")) if closing else None,
+        )
         return _present(state)
 
     def start(self, timestamp=None, force=False) -> dict:
@@ -442,12 +442,10 @@ class CombatTracker:
 
     def end(self, reason="manual", timestamp=None) -> dict:
         ts = event_epoch_ms(timestamp)
-        state, changed = self.store.mutate(
-            lambda state: self._end_session(state, ts, str(reason))
+        state, _changed = self.store.mutate(
+            lambda state: self._end_session(state, ts, str(reason)),
+            archive=lambda value: _present(value).get("session"),
         )
-        summary = _present(state).get("session")
-        if changed and summary:
-            self.store.archive(summary["session_key"], summary)
         return _present(state)
 
     def update_inputs(self, *, loadout=None, materials=None, cargo=None) -> dict:

@@ -10,18 +10,22 @@ let routeFormTouched = false;
 let galaxyHistory = [];
 let galaxyHistoryCommander = null;
 let securityStatus = null;
+let securityLocked = false;
+let pairingReturnFocus = null;
+let pairingInertState = [];
 let opsState = {
   objectives: [], plan: null, timings: null, boards: [], snapshot: null,
-  conflicts: [], activeBoardId: localStorage.getItem("opsBoardId") || "",
+  conflicts: [], activeBoardId: "",
 };
 let opsWorkspaceLoading = null;
 let specialistState = null;
 let specialistLoading = null;
 let specialistLastFetch = 0;
+let profileGeneration = 0;
 
 /* Active route being flown (persisted): { kind, label, waypoints:[{system,note}], index } */
 let activeRoute = null;
-try { activeRoute = JSON.parse(localStorage.getItem("activeRoute") || "null"); } catch (e) {}
+let activeRouteCommander = null;
 
 /* ---------- helpers ---------- */
 
@@ -58,12 +62,103 @@ function friendlyDeviceName() {
   return `${platform}${mobile ? " tablet" : " browser"}`.slice(0, 80);
 }
 
+function pairingFocusable(gate) {
+  return [...gate.querySelectorAll('button:not([disabled]):not(.hidden), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+    .filter((element) => !element.closest(".hidden"));
+}
+
+function pairingTrapKeydown(event) {
+  const gate = $("pairing-gate");
+  if (gate.classList.contains("hidden") || event.key !== "Tab") return;
+  const focusable = pairingFocusable(gate);
+  if (!focusable.length) {
+    event.preventDefault();
+    gate.querySelector(".pairing-panel").focus();
+    return;
+  }
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function setPairingModalOpen(open) {
+  const gate = $("pairing-gate");
+  const wasOpen = !gate.classList.contains("hidden");
+  if (open) {
+    if (!wasOpen) {
+      pairingReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      pairingInertState = [...document.body.children]
+        .filter((element) => element !== gate && element instanceof HTMLElement)
+        .map((element) => ({
+          element,
+          inert: !!element.inert,
+          ariaHidden: element.getAttribute("aria-hidden"),
+        }));
+      for (const item of pairingInertState) {
+        item.element.inert = true;
+        item.element.setAttribute("aria-hidden", "true");
+      }
+      gate.addEventListener("keydown", pairingTrapKeydown);
+    }
+    gate.classList.remove("hidden");
+    gate.setAttribute("aria-hidden", "false");
+    setTimeout(() => {
+      const target = pairingFocusable(gate)[0] || gate.querySelector(".pairing-panel");
+      target?.focus();
+    }, 0);
+    return;
+  }
+  gate.classList.add("hidden");
+  gate.setAttribute("aria-hidden", "true");
+  gate.removeEventListener("keydown", pairingTrapKeydown);
+  for (const item of pairingInertState) {
+    item.element.inert = item.inert;
+    if (item.ariaHidden == null) item.element.removeAttribute("aria-hidden");
+    else item.element.setAttribute("aria-hidden", item.ariaHidden);
+  }
+  pairingInertState = [];
+  if (pairingReturnFocus?.isConnected) pairingReturnFocus.focus();
+  pairingReturnFocus = null;
+}
+
 function showPairingGate(title, message, retry) {
   const gate = $("pairing-gate");
-  gate.classList.remove("hidden");
   $("pairing-title").textContent = title;
   $("pairing-message").textContent = message;
   $("pairing-retry").classList.toggle("hidden", !retry);
+  setPairingModalOpen(true);
+}
+
+function clearAuthenticatedRuntime() {
+  state = null;
+  securityStatus = null;
+  activeRoute = null;
+  activeRouteCommander = null;
+  galaxyHistory = [];
+  galaxyHistoryCommander = null;
+  engMatsSig = null;
+  resetProfileWorkspaces(null);
+}
+
+function enterPairingRequired(message) {
+  securityLocked = true;
+  try {
+    clearAuthenticatedRuntime();
+  } catch (_error) {
+    // A stale workspace must never prevent a revoked device from being locked.
+    state = null;
+  } finally {
+    showPairingGate(
+      "This device is not paired",
+      message || "Access was revoked or expired. Open a new one-time LAN link from Frameshift on the gaming PC.",
+      true,
+    );
+  }
 }
 
 async function fetchSecurityStatus() {
@@ -91,14 +186,11 @@ async function bootstrapSecurity() {
     }
     const status = await fetchSecurityStatus();
     if (status.pairing_required) {
-      showPairingGate(
-        "This device is not paired",
-        "Open the current one-time LAN link shown in Frameshift on the gaming PC. Previously paired devices reconnect automatically.",
-        true,
-      );
+      enterPairingRequired("Open the current one-time LAN link shown in Frameshift on the gaming PC. Previously paired devices reconnect automatically.");
       return false;
     }
-    $("pairing-gate").classList.add("hidden");
+    securityLocked = false;
+    setPairingModalOpen(false);
     return true;
   } catch (error) {
     showPairingGate("Pairing could not finish", String(error.message || error), true);
@@ -214,7 +306,22 @@ async function loadLocalServices() {
     $("extensions-status").innerHTML =
       `<b>${loaded.length} extension pack${loaded.length === 1 ? "" : "s"} loaded</b>` +
       `<span class="dim"> from the local extensions folder` +
-      `${errors.length ? ` · ${errors.length} rejected (details included in diagnostics)` : ""}</span>`;
+      `${errors.length ? ` · ${errors.length} rejected (details included in diagnostics)` : ""}</span>` +
+      `<div class="extension-rows">${loaded.map((extension) => {
+        const process = extension.mode === "process";
+        const permissionText = (extension.permissions || []).join(" / ") || "no permissions";
+        const approval = process
+          ? extension.approved
+            ? '<span class="good">APPROVED FOR THIS EXACT BUILD</span>'
+            : '<span class="warn">CODE EXECUTION BLOCKED · APPROVAL REQUIRED</span>'
+          : '<span class="good">DECLARATIVE · NO CODE EXECUTION</span>';
+        const action = !process ? "" : extension.approved
+          ? `<button type="button" class="copy danger" data-extension-action="revoke" data-extension-id="${esc(extension.id)}">REVOKE</button>`
+          : `<button type="button" class="copy" data-extension-action="approve" data-extension-id="${esc(extension.id)}">APPROVE CODE</button>`;
+        return `<div class="extension-row"><div><b>${esc(extension.name || extension.id)}</b>` +
+          `<span class="dim">${esc(extension.id)} · ${esc(extension.version || "0")} · ${esc(permissionText)}</span>` +
+          `<span>${approval}${process && extension.fingerprint ? ` · fingerprint ${esc(extension.fingerprint)}` : ""}</span></div>${action}</div>`;
+      }).join("")}</div>`;
   } catch (error) {
     $("local-health").textContent = String(error.message || error);
   }
@@ -254,6 +361,27 @@ async function reloadExtensions() {
   try {
     const response = await fetch("/api/extensions/reload", { method: "POST" });
     if (!response.ok) throw new Error("Extension packs could not be reloaded.");
+    await loadLocalServices();
+  } catch (error) {
+    $("extensions-status").textContent = String(error.message || error);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function changeExtensionApproval(extensionId, action, button) {
+  if (!extensionId || !["approve", "revoke"].includes(action)) return;
+  if (action === "approve" && !window.confirm(
+    "Approve this exact process extension build? It can execute local code and is not an operating-system sandbox. Any code change will require approval again."
+  )) return;
+  button.disabled = true;
+  try {
+    const response = await fetch(
+      `/api/extensions/${encodeURIComponent(extensionId)}/${action}`,
+      { method: "POST" },
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Extension approval could not be changed.");
     await loadLocalServices();
   } catch (error) {
     $("extensions-status").textContent = String(error.message || error);
@@ -917,14 +1045,63 @@ function sysEq(a, b) {
   return (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase();
 }
 
+function profileStorageId(snapshot = state) {
+  return String(snapshot?.commander_id || "").trim() || null;
+}
+
+function commanderFetch(url, options = {}) {
+  const commanderId = profileStorageId();
+  if (!commanderId) throw new Error("Wait for the commander profile before accessing local commander data.");
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      "X-Frameshift-Commander": commanderId,
+    },
+  });
+}
+
+function activeRouteKey(commanderId) {
+  return `activeRoute:v2:${encodeURIComponent(commanderId)}`;
+}
+
+function loadActiveRoute(commanderId) {
+  activeRouteCommander = commanderId || null;
+  activeRoute = null;
+  if (!commanderId) return;
+  const key = activeRouteKey(commanderId);
+  try {
+    let raw = localStorage.getItem(key);
+    // The old key had no commander discriminator. The first established
+    // profile adopts it and removes the ambiguous copy; Live/Legacy or another
+    // account can never inherit it afterwards.
+    if (raw == null) {
+      raw = localStorage.getItem("activeRoute");
+      if (raw != null) {
+        localStorage.setItem(key, raw);
+        localStorage.removeItem("activeRoute");
+      }
+    }
+    const parsed = JSON.parse(raw || "null");
+    activeRoute = parsed && Array.isArray(parsed.waypoints) ? parsed : null;
+  } catch (error) {
+    activeRoute = null;
+  }
+}
+
 function saveActiveRoute() {
-  if (activeRoute) localStorage.setItem("activeRoute", JSON.stringify(activeRoute));
-  else localStorage.removeItem("activeRoute");
+  const commanderId = profileStorageId();
+  if (!commanderId || activeRouteCommander !== commanderId) return;
+  const key = activeRouteKey(commanderId);
+  if (activeRoute) localStorage.setItem(key, JSON.stringify(activeRoute));
+  else localStorage.removeItem(key);
 }
 
 function trackRoute(kind, label, waypoints) {
   waypoints = (waypoints || []).filter((w) => w && w.system);
-  if (!waypoints.length) return;
+  const commanderId = profileStorageId();
+  if (!waypoints.length || !commanderId) return;
+  activeRouteCommander = commanderId;
   activeRoute = { kind, label, waypoints, index: 0 };
   // If we're already sitting at an early waypoint, start from there.
   syncRouteToPosition();
@@ -1109,6 +1286,7 @@ function render() {
   // Re-plan against all three inventories used by ship, synthesis and Odyssey
   // recipes whenever any one of them changes.
   const engineeringInventorySig = JSON.stringify([
+    state.commander_id || null,
     state.materials || null,
     state.ship_locker || null,
     state.cargo_inventory || null,
@@ -1425,10 +1603,18 @@ let engKindLabels = {};
 
 async function loadEngineering() {
   const summary = $("engplan-summary");
+  const expectedCommander = profileStorageId();
+  const generation = profileGeneration;
+  if (!expectedCommander) {
+    if (summary) summary.innerHTML = '<div class="dim ep-api-error">Waiting for the commander profile...</div>';
+    return;
+  }
   try {
     const resp = await fetch("/api/engineering");
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    if (generation !== profileGeneration || profileStorageId() !== expectedCommander
+        || data.commander_id !== expectedCommander) return;
     const localCatalog = data.catalog || {};
     engCatalog = (localCatalog.groups || []).filter((item) => !item.alias_of);
     engCatalogById = new Map(engCatalog.map((item) => [item.id, item]));
@@ -1439,6 +1625,7 @@ async function loadEngineering() {
     renderEngPlans(data.wishlist || { items: data.pinned || [], materials: [] });
     setText("ep-catalog-count", `${engCatalog.length.toLocaleString()} items · ${(catalogStats.recipes || 0).toLocaleString()} recipes`);
   } catch (error) {
+    if (generation !== profileGeneration || profileStorageId() !== expectedCommander) return;
     if (summary) summary.innerHTML = `<div class="warn ep-api-error">Engineering planner unavailable: ${esc(error.message)}</div>`;
   }
 }
@@ -1633,7 +1820,7 @@ function editEngineeringItem(item) {
 
 async function pinBlueprint(item) {
   try {
-    const resp = await fetch("/api/engineering/pin", {
+    const resp = await commanderFetch("/api/engineering/pin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(item),
@@ -2110,14 +2297,26 @@ function renderCarrier() {
 
 /* ---------- galaxy: local Powerplay · BGS · conflicts · visit history ---------- */
 
-function galaxyHistoryKey(commander) {
-  return "galaxyHistory:v1:" + encodeURIComponent(commander || "unknown");
+function galaxyHistoryKey(commanderId) {
+  return "galaxyHistory:v2:" + encodeURIComponent(commanderId);
 }
 
-function loadGalaxyHistory(commander) {
-  galaxyHistoryCommander = commander || "unknown";
+function loadGalaxyHistory(commanderId, legacyCommanderName) {
+  galaxyHistoryCommander = commanderId || null;
+  galaxyHistory = [];
+  if (!commanderId) return;
   try {
-    const value = JSON.parse(localStorage.getItem(galaxyHistoryKey(galaxyHistoryCommander)) || "[]");
+    const key = galaxyHistoryKey(commanderId);
+    let raw = localStorage.getItem(key);
+    if (raw == null && legacyCommanderName) {
+      const legacyKey = "galaxyHistory:v1:" + encodeURIComponent(legacyCommanderName);
+      raw = localStorage.getItem(legacyKey);
+      if (raw != null) {
+        localStorage.setItem(key, raw);
+        localStorage.removeItem(legacyKey);
+      }
+    }
+    const value = JSON.parse(raw || "[]");
     galaxyHistory = Array.isArray(value) ? value : [];
   } catch (e) {
     galaxyHistory = [];
@@ -2125,14 +2324,20 @@ function loadGalaxyHistory(commander) {
 }
 
 function saveGalaxyHistory() {
+  if (!galaxyHistoryCommander) return;
   try {
     localStorage.setItem(galaxyHistoryKey(galaxyHistoryCommander), JSON.stringify(galaxyHistory));
   } catch (e) { /* a full/disabled browser store must never break live rendering */ }
 }
 
 function updateGalaxyHistory(gal) {
-  const commander = state.commander || "unknown";
-  if (galaxyHistoryCommander !== commander) loadGalaxyHistory(commander);
+  const commanderId = profileStorageId();
+  if (!commanderId) {
+    return { all: [], entries: [], current: null, previous: null };
+  }
+  if (galaxyHistoryCommander !== commanderId) {
+    loadGalaxyHistory(commanderId, state.commander || null);
+  }
   const entry = GalaxyData.observation(state.system, gal, new Date().toISOString());
   const previousLength = galaxyHistory.length;
   const previousTail = galaxyHistory[previousLength - 1];
@@ -2395,7 +2600,9 @@ function renderGalaxyHistory(history) {
 
 function clearGalaxyHistory() {
   if (!window.confirm("Clear the Galaxy observations saved in this browser and make the current system a new baseline?")) return;
-  if (galaxyHistoryCommander == null) galaxyHistoryCommander = (state && state.commander) || "unknown";
+  if (galaxyHistoryCommander == null) {
+    loadGalaxyHistory(profileStorageId(), state?.commander || null);
+  }
   galaxyHistory = [];
   saveGalaxyHistory();
   $("galaxy-history-card").dataset.sig = "";
@@ -2986,7 +3193,7 @@ async function watchLoop(loop, btn) {
     try { await Notification.requestPermission(); } catch (e) {}
   }
   try {
-    const resp = await fetch("/api/watch", {
+    const resp = await commanderFetch("/api/watch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ loop }),
@@ -3004,17 +3211,49 @@ async function watchLoop(loop, btn) {
 let lastAlertTs = null;
 let alertPollTimer = null;
 
-async function pollAlerts() {
+function clearAlertWorkspace() {
   if (alertPollTimer) clearTimeout(alertPollTimer);
+  alertPollTimer = null;
+  lastAlertTs = null;
+  lastAlertId = 0;
+  alertsInit = false;
+  lastFuelSig = null;
+  if ($("watch-list")) $("watch-list").replaceChildren();
+  if ($("alert-strip")) {
+    $("alert-strip").replaceChildren();
+    $("alert-strip").classList.add("hidden");
+  }
+  if ($("flight-toast")) {
+    clearTimeout(flightToastTimer);
+    flightToastTimer = null;
+    $("flight-toast").classList.add("hidden");
+    $("flight-toast").textContent = "";
+  }
+}
+
+async function pollAlerts() {
+  const generation = profileGeneration;
+  const expectedCommander = profileStorageId(state);
+  if (alertPollTimer) clearTimeout(alertPollTimer);
+  alertPollTimer = null;
+  if (!expectedCommander) {
+    clearAlertWorkspace();
+    return;
+  }
   try {
     const resp = await fetch("/api/alerts", { cache: "no-store" });
     if (resp.ok) {
       const data = await resp.json();
+      if (generation !== profileGeneration
+          || expectedCommander !== profileStorageId(state)
+          || String(data.commander_id || "") !== expectedCommander) return;
       renderWatches(data.watches || []);
       renderAlerts(data.alerts || []);
     }
   } catch (e) { /* retry next tick */ }
-  alertPollTimer = setTimeout(pollAlerts, 15000);
+  if (generation === profileGeneration && expectedCommander === profileStorageId(state)) {
+    alertPollTimer = setTimeout(pollAlerts, 15000);
+  }
 }
 
 function renderWatches(watches) {
@@ -3029,7 +3268,7 @@ function renderWatches(watches) {
     x.textContent = "×";
     x.title = "Stop watching";
     x.addEventListener("click", async () => {
-      await fetch("/api/watch/remove", {
+      await commanderFetch("/api/watch/remove", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: w.id }),
       });
@@ -3075,7 +3314,7 @@ function renderAlerts(alerts) {
   dismiss.className = "copy";
   dismiss.textContent = "dismiss";
   dismiss.addEventListener("click", async () => {
-    await fetch("/api/alerts/clear", { method: "POST" });
+    await commanderFetch("/api/alerts/clear", { method: "POST" });
     pollAlerts();
   });
   strip.appendChild(dismiss);
@@ -3978,11 +4217,35 @@ function drawDailyChart(svg, days) {
   });
 }
 
+function clearAnalyticsWorkspace() {
+  for (const id of ["an-today", "an-week", "an-period", "an-tons", "session-trade", "session-tons"]) {
+    if ($(id)) $(id).textContent = "\u2014";
+  }
+  renderEarnings({});
+  for (const id of ["an-balance", "an-daily"]) {
+    if ($(id)) $(id).replaceChildren();
+  }
+  if ($("an-top")) {
+    $("an-top").classList.add("hidden");
+    $("an-top").querySelector("tbody")?.replaceChildren();
+  }
+  $("an-empty")?.classList.remove("hidden");
+}
+
 async function loadAnalytics() {
+  const generation = profileGeneration;
+  const expectedCommander = profileStorageId(state);
+  if (!expectedCommander) {
+    clearAnalyticsWorkspace();
+    return;
+  }
   try {
     const resp = await fetch("/api/analytics?days=" + $("an-days").value, { cache: "no-store" });
     if (!resp.ok) return;
     const a = await resp.json();
+    if (generation !== profileGeneration
+        || expectedCommander !== profileStorageId(state)
+        || String(a.commander_id || "") !== expectedCommander) return;
     $("an-today").textContent = "+" + fmtNum(a.today.profit) + " cr";
     $("an-week").textContent = "+" + fmtNum(a.week.profit) + " cr";
     $("an-period").textContent = "+" + fmtNum(a.period.profit) + " cr";
@@ -4307,7 +4570,9 @@ const SETTINGS_DEFS = [
   { key: "exclude_carriers", label: "Exclude fleet carriers",
     desc: "Keep fleet carriers out of the market database and its results — carriers move, so listed positions go stale. Untick to collect carrier markets from the live feed too (rebuild the database to include them from the start)." },
   { key: "eddn_upload", label: "Contribute market data (EDDN)",
-    desc: "Upload markets you dock at back to the community feed this app is built on. Anonymous." },
+    desc: "Upload only commodity markets you dock at back to the community feed this app is built on. Anonymous and enabled by default." },
+  { key: "eddn_extended_upload", label: "Contribute exploration & navigation observations (EDDN)",
+    desc: "Optional broader contribution: routes, scans, biological signals, exact Codex/settlement coordinates, docking outcomes, outfitting, shipyard and carrier-material observations. Anonymous; off until you opt in." },
   { key: "auto_update", label: "Automatic updates",
     desc: "Check for new releases and offer a one-click update.", requires: "auto_update_supported" },
 ];
@@ -4740,8 +5005,34 @@ async function saveSetting(key, value, row) {
 
 /* ---------- OPS: local objectives, session planning and learned timings ---------- */
 
+function opsBoardStorageKey(commanderId = profileStorageId()) {
+  return commanderId ? `opsBoardId:v2:${encodeURIComponent(commanderId)}` : null;
+}
+
+function loadOpsBoardId(commanderId) {
+  if (!commanderId) return "";
+  const key = opsBoardStorageKey(commanderId);
+  let value = localStorage.getItem(key);
+  if (value == null) {
+    value = localStorage.getItem("opsBoardId");
+    if (value != null) {
+      localStorage.setItem(key, value);
+      localStorage.removeItem("opsBoardId");
+    }
+  }
+  return value || "";
+}
+
+function saveOpsBoardId(value) {
+  const key = opsBoardStorageKey();
+  if (!key) return;
+  if (value) localStorage.setItem(key, value);
+  else localStorage.removeItem(key);
+}
+
 async function opsJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const generation = profileGeneration;
+  const response = await commanderFetch(url, options);
   const raw = await response.text();
   let data = {};
   if (raw) {
@@ -4749,6 +5040,7 @@ async function opsJson(url, options = {}) {
     catch (error) { data = { error: raw.slice(0, 300) }; }
   }
   if (!response.ok) throw new Error(data.error || data.message || `Local OPS request failed (${response.status}).`);
+  if (generation !== profileGeneration) throw new Error("Commander profile changed while the OPS request was running.");
   return data;
 }
 
@@ -4812,12 +5104,15 @@ function renderOpsTimings() {
 }
 
 async function loadOpsTimings() {
+  const generation = profileGeneration;
   try {
     const data = await opsJson("/api/timings", { cache: "no-store" });
+    if (generation !== profileGeneration) return;
     opsState.timings = data.timings || data;
     renderOpsTimings();
     if (opsState.plan) renderOpsPlan(opsState.plan);
   } catch (error) {
+    if (generation !== profileGeneration) return;
     $("ops-timing-summary").textContent = "UNAVAILABLE";
     $("ops-timing-list").innerHTML = `<div class="empty warn">${esc(error.message)}</div>`;
   }
@@ -4952,12 +5247,15 @@ function renderOpsObjectives() {
 }
 
 async function loadOpsObjectives() {
+  const generation = profileGeneration;
   try {
     const statuses = encodeURIComponent(opsObjectiveQuery());
     const data = await opsJson(`/api/objectives?statuses=${statuses}`, { cache: "no-store" });
+    if (generation !== profileGeneration) return;
     opsState.objectives = data.objectives || (Array.isArray(data) ? data : []);
     renderOpsObjectives();
   } catch (error) {
+    if (generation !== profileGeneration) return;
     $("ops-objective-statusline").innerHTML = `<span class="warn">${esc(error.message)}</span>`;
   }
 }
@@ -5201,23 +5499,26 @@ function renderOperationsBoard() {
 }
 
 async function loadOperations() {
+  const generation = profileGeneration;
   try {
     const listData = await opsJson("/api/operations", { cache: "no-store" });
+    if (generation !== profileGeneration) return;
     opsState.boards = listData.boards || (Array.isArray(listData) ? listData : []);
     const selectedExists = opsState.boards.some((board) => board.id === opsState.activeBoardId);
     if (!selectedExists) {
       opsState.activeBoardId = opsState.boards[0]?.id || "";
-      if (opsState.activeBoardId) localStorage.setItem("opsBoardId", opsState.activeBoardId);
-      else localStorage.removeItem("opsBoardId");
+      saveOpsBoardId(opsState.activeBoardId);
     }
     let detailData = null;
     if (opsState.activeBoardId) {
       detailData = await opsJson(`/api/operations?board_id=${encodeURIComponent(opsState.activeBoardId)}`, { cache: "no-store" });
+      if (generation !== profileGeneration) return;
     }
     opsState.snapshot = detailData?.snapshot || (detailData?.board ? detailData : null);
     opsState.conflicts = detailData?.conflicts || listData.conflicts || [];
     renderOperationsBoard();
   } catch (error) {
+    if (generation !== profileGeneration) return;
     $("ops-board-empty").classList.remove("hidden");
     $("ops-board-empty").innerHTML = `<span class="warn">${esc(error.message)}</span>`;
     $("ops-board-workspace").classList.add("hidden");
@@ -5246,7 +5547,7 @@ async function createOperationsBoard(event) {
     $("ops-board-form").reset();
     $("ops-new-board-wrap").open = false;
     opsState.activeBoardId = board.id || "";
-    if (opsState.activeBoardId) localStorage.setItem("opsBoardId", opsState.activeBoardId);
+    saveOpsBoardId(opsState.activeBoardId);
     await loadOperations();
   } catch (error) {
     $("ops-import-report").innerHTML = `<span class="warn">${esc(error.message)}</span>`;
@@ -5340,7 +5641,7 @@ async function deleteOperation(kind, recordId) {
     await opsJson(`/api/operations/${encodeURIComponent(kind)}/${encodeURIComponent(recordId)}`, { method: "DELETE" });
     if (kind === "boards") {
       opsState.activeBoardId = "";
-      localStorage.removeItem("opsBoardId");
+      saveOpsBoardId("");
     }
     await loadOperations();
   } catch (error) {
@@ -5392,7 +5693,7 @@ async function importOperationsBoard(event) {
     const firstBoard = documentValue.records?.boards?.[0]?.id;
     if (firstBoard) {
       opsState.activeBoardId = firstBoard;
-      localStorage.setItem("opsBoardId", firstBoard);
+      saveOpsBoardId(firstBoard);
     }
     $("ops-import-report").innerHTML = `<span class="good">Import complete: ` +
       `${Number(report.inserted || 0)} inserted, ${Number(report.updated || 0)} updated, ` +
@@ -5411,9 +5712,12 @@ async function loadOpsWorkspace() {
     if (!$("ops-assignment-name").value) $("ops-assignment-name").value = state.commander;
     if (!$("ops-contribution-name").value) $("ops-contribution-name").value = state.commander;
   }
-  opsWorkspaceLoading = Promise.all([loadOpsObjectives(), loadOpsTimings(), loadOperations()])
-    .finally(() => { opsWorkspaceLoading = null; });
-  return opsWorkspaceLoading;
+  const loading = Promise.all([loadOpsObjectives(), loadOpsTimings(), loadOperations()]);
+  opsWorkspaceLoading = loading;
+  loading.finally(() => {
+    if (opsWorkspaceLoading === loading) opsWorkspaceLoading = null;
+  });
+  return loading;
 }
 
 /* ---------- local specialist workflows ---------- */
@@ -5447,18 +5751,22 @@ function specialistError(error, fallback = "The specialist service is unavailabl
 }
 
 async function specialistJson(url, options = {}) {
+  const generation = profileGeneration;
   const request = { cache: "no-store", ...options };
   const isFormData = typeof FormData !== "undefined" && request.body instanceof FormData;
   if (request.body != null && !isFormData) {
     request.headers = { "Content-Type": "application/json", ...(request.headers || {}) };
     if (typeof request.body !== "string") request.body = JSON.stringify(request.body);
   }
-  const response = await fetch(url, request);
+  const response = await commanderFetch(url, request);
   const raw = await response.text();
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = { error: raw }; }
   if (!response.ok) {
     throw new Error(data.error || data.message || `Request failed (${response.status})`);
+  }
+  if (generation !== profileGeneration) {
+    throw new Error("Commander profile changed while the specialist request was running.");
   }
   return data;
 }
@@ -5485,10 +5793,15 @@ function specialistHistory(name) {
 
 async function loadSpecialists(silent = false) {
   if (specialistLoading) return specialistLoading;
+  const generation = profileGeneration;
+  const expectedCommander = profileStorageId();
+  if (!expectedCommander) return null;
   const status = $("sp-global-status");
   if (!silent && status) status.textContent = "Loading local specialist records…";
-  specialistLoading = specialistJson("/api/specialists")
+  const loading = specialistJson("/api/specialists")
     .then((data) => {
+      if (generation !== profileGeneration || profileStorageId() !== expectedCommander
+          || (data.commander_id && data.commander_id !== expectedCommander)) return null;
       specialistState = normaliseSpecialistSnapshot(data);
       specialistLastFetch = Date.now();
       renderSpecialists();
@@ -5499,14 +5812,18 @@ async function loadSpecialists(silent = false) {
       return specialistState;
     })
     .catch((error) => {
+      if (generation !== profileGeneration) return null;
       if (status) {
         status.textContent = `Specialist records unavailable: ${specialistError(error)}`;
         status.classList.add("error");
       }
       return null;
-    })
-    .finally(() => { specialistLoading = null; });
-  return specialistLoading;
+    });
+  specialistLoading = loading;
+  loading.finally(() => {
+    if (specialistLoading === loading) specialistLoading = null;
+  });
+  return loading;
 }
 
 function specialistDuration(session, active) {
@@ -5907,7 +6224,9 @@ function renderExobiologySpecialist() {
   }
 
   const pins = map?.pins || [];
-  $("sp-exobio-pin-count").textContent = `${pins.length} PIN${pins.length === 1 ? "" : "S"}`;
+  const pinTotal = Number(map?.pins_total ?? pins.length);
+  $("sp-exobio-pin-count").textContent = `${pinTotal} PIN${pinTotal === 1 ? "" : "S"}` +
+    (pinTotal > pins.length ? ` / ${pins.length} MOST RECENT SHOWN` : "");
   $("sp-exobio-pins").innerHTML = pins.length ? pins.slice().reverse().map((pin) => {
     const bearing = pin.bearing_deg == null ? "bearing unknown" : `${Math.round(pin.bearing_deg)}° · ${specialistNumber(pin.distance_m, " m")}`;
     const relative = pin.relative_bearing_deg == null ? "" : ` · ${pin.relative_bearing_deg < 0 ? "left" : "right"} ${Math.abs(Math.round(pin.relative_bearing_deg))}°`;
@@ -6060,11 +6379,113 @@ function initSpecialists() {
 
 /* ---------- wiring ---------- */
 
+function resetProfileWorkspaces(nextSnapshot) {
+  profileGeneration += 1;
+  const commanderId = profileStorageId(nextSnapshot);
+  const commanderName = nextSnapshot?.commander || "";
+
+  clearAnalyticsWorkspace();
+  clearAlertWorkspace();
+  loadActiveRoute(commanderId);
+  loadGalaxyHistory(commanderId, commanderName || null);
+  engMatsSig = null;
+  for (const id of ["engplan-summary", "engplan-list", "engplan-materials", "engplan-traders"]) {
+    if ($(id)) $(id).replaceChildren();
+  }
+  if ($("engplan-summary")) {
+    $("engplan-summary").innerHTML = `<div class="dim ep-api-error">${commanderId
+      ? "Loading this commander's engineering wishlist..."
+      : "Waiting for a commander profile..."}</div>`;
+  }
+  $("engplan-form")?.reset();
+  if ($("ep-pin")) $("ep-pin").textContent = "ADD TO WISHLIST";
+
+  opsWorkspaceLoading = null;
+  opsState = {
+    objectives: [], plan: null, timings: null, boards: [], snapshot: null,
+    conflicts: [], activeBoardId: loadOpsBoardId(commanderId),
+  };
+  specialistState = null;
+  specialistLoading = null;
+  specialistLastFetch = 0;
+
+  if ($("ops-objective-form")) resetOpsObjectiveForm();
+  for (const id of [
+    "ops-board-form", "ops-board-objective-form", "ops-assignment-form",
+    "ops-reservation-form", "ops-contribution-form",
+  ]) {
+    $(id)?.reset();
+  }
+  if ($("ops-assignment-name")) $("ops-assignment-name").value = commanderName;
+  if ($("ops-contribution-name")) $("ops-contribution-name").value = commanderName;
+  for (const id of [
+    "ops-plan-selected", "ops-plan-alternatives", "ops-objective-list",
+    "ops-board-objectives", "ops-assignments", "ops-reservations", "ops-contributions",
+    "ops-timing-list", "ops-plan-warnings", "ops-conflicts",
+  ]) {
+    if ($(id)) $(id).replaceChildren();
+  }
+  if ($("ops-board-workspace")) $("ops-board-workspace").classList.add("hidden");
+  if ($("ops-board-empty")) {
+    $("ops-board-empty").classList.remove("hidden");
+    $("ops-board-empty").textContent = commanderId
+      ? "Loading this commander's local operations workspace..."
+      : "Waiting for a commander profile...";
+  }
+
+  for (const id of ["sp-carrier-config-form", "sp-carrier-inventory-form", "sp-carrier-legs"]) {
+    const element = $(id);
+    if (element) delete element.dataset.seeded;
+  }
+  $("sp-carrier-config-form")?.reset();
+  $("sp-carrier-inventory-form")?.reset();
+  $("sp-carrier-route-form")?.reset();
+  if ($("sp-carrier-legs")) {
+    $("sp-carrier-legs").replaceChildren();
+    carrierAddRouteLeg();
+  }
+  if ($("sp-global-status")) {
+    $("sp-global-status").textContent = commanderId
+      ? "Loading local specialist records for this commander..."
+      : "Waiting for a commander profile...";
+  }
+  if ($("sp-global-status")) renderSpecialists();
+
+  for (const id of [
+    "galaxy-history-card", "galhistory-list", "powerplay-card", "factions-list",
+  ]) {
+    if ($(id)) $(id).dataset.sig = "";
+  }
+  renderRouteProgress();
+
+  if (commanderId) {
+    // Do not wait for the user to revisit a tab: stale forms and cached
+    // responses must be replaced as part of the identity transition itself.
+    loadEngineering();
+    loadOpsWorkspace();
+    loadSpecialists(true);
+    loadAnalytics();
+    pollAlerts();
+  }
+}
+
 async function poll() {
   try {
     const resp = await fetch("/api/state", { cache: "no-store" });
+    if (resp.status === 401) {
+      let detail = {};
+      try { detail = await resp.json(); } catch (error) {}
+      enterPairingRequired(detail.error || "This device's access was revoked or expired. Pair it again from the gaming PC.");
+      setTimeout(poll, 1500);
+      return;
+    }
     if (resp.ok) {
-      state = await resp.json();
+      const nextState = await resp.json();
+      const previousCommander = profileStorageId();
+      state = nextState;
+      const nextCommander = profileStorageId(nextState);
+      if (previousCommander !== nextCommander) resetProfileWorkspaces(nextState);
+      securityLocked = false;
       render();
     }
   } catch (e) { /* server briefly unreachable; keep last render */ }
@@ -6120,7 +6541,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   $("ops-board-select").addEventListener("change", (event) => {
     opsState.activeBoardId = event.currentTarget.value;
-    if (opsState.activeBoardId) localStorage.setItem("opsBoardId", opsState.activeBoardId);
+    saveOpsBoardId(opsState.activeBoardId);
     loadOperations();
   });
   $("ops-board-refresh").addEventListener("click", loadOperations);
@@ -6254,6 +6675,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("pairing-refresh").addEventListener("click", () => refreshSecurityPanel(true));
   $("diagnostics-bundle").addEventListener("click", downloadSupportBundle);
   $("extensions-reload").addEventListener("click", reloadExtensions);
+  $("extensions-status").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-extension-action]");
+    if (button) changeExtensionApproval(
+      button.dataset.extensionId, button.dataset.extensionAction, button);
+  });
   $("cs-form").addEventListener("submit", searchCommodity);
   $("mining-form").addEventListener("submit", searchMining);
   $("os-form").addEventListener("submit", searchStations);

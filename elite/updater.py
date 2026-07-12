@@ -16,9 +16,11 @@ Distribution is already GitHub-Releases based (see .github/workflows/release.yml
 so no extra infrastructure is needed."""
 
 import hashlib
+import json
 import logging
 import os
 import re
+import secrets
 import subprocess
 import sys
 import threading
@@ -41,8 +43,14 @@ HEADERS = {"Accept": "application/vnd.github+json", "User-Agent": "Frameshift-Up
 CHECK_TIMEOUT = 15
 DOWNLOAD_TIMEOUT = 60
 MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
+HEALTH_CONFIRM_SECONDS = 60
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _logger = logging.getLogger(__name__)
+_DOWNLOAD_HOSTS = {
+    "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com",
+}
+_CHECKSUM_HOSTS = _DOWNLOAD_HOSTS
+_API_HOSTS = {"api.github.com"}
 
 
 def is_supported():
@@ -74,6 +82,59 @@ def _exe_stem():
     still live at EliteTrader.exe (the in-place swap keeps the old filename),
     so staging/backup names must follow the actual file, not the product name."""
     return Path(sys.executable).stem
+
+
+def _trusted_https(url, hosts):
+    try:
+        parsed = urlsplit(str(url or ""))
+        return (
+            parsed.scheme == "https"
+            and (parsed.hostname or "").lower() in hosts
+            and parsed.username is None
+            and parsed.password is None
+            and parsed.port in (None, 443)
+        )
+    except ValueError:
+        return False
+
+
+def _require_final_url(response, hosts, label):
+    final_url = getattr(response, "url", None)
+    if not _trusted_https(final_url, hosts):
+        raise RuntimeError(f"{label} redirected to an untrusted address")
+
+
+def _update_health_path():
+    return _exe_dir() / ".frameshift-update-health.json"
+
+
+def _write_update_health(payload):
+    path = _update_health_path()
+    temporary = path.parent / f".{path.name}.{os.getpid()}.{secrets.token_hex(6)}.tmp"
+    try:
+        with open(temporary, "x", encoding="utf-8", newline="\n") as stream:
+            json.dump(payload, stream, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except OSError:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _read_update_health():
+    try:
+        path = _update_health_path()
+        if path.stat().st_size > 16 * 1024:
+            return None
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
 
 
 def updater_script(exe_path, new_path):
@@ -147,6 +208,7 @@ class Updater:
         self.error = None
         self.downloaded = 0
         self.total = 0
+        self._health_timer = None
 
     # ---------- version / check ----------
 
@@ -171,10 +233,18 @@ class Updater:
             "notes_title": None,
             "size": None,
             "supported": is_supported(),
+            # The digest is delivered beside the executable by the same GitHub
+            # release. It detects corruption/truncation; it is not an
+            # independent publisher signature.
+            "verification": "SHA-256 integrity (same release channel)",
             "error": None,
         }
         try:
-            resp = requests.get(API_LATEST, headers=HEADERS, timeout=CHECK_TIMEOUT)
+            resp = requests.get(
+                API_LATEST, headers=HEADERS, timeout=CHECK_TIMEOUT,
+                allow_redirects=True,
+            )
+            _require_final_url(resp, _API_HOSTS, "release metadata")
             if resp.status_code != 200:
                 result["error"] = f"GitHub returned {resp.status_code}"
             else:
@@ -194,7 +264,7 @@ class Updater:
                     result["_assets"] = assets
                 result["available"] = bool(asset) and \
                     parse_version(tag) > parse_version(VERSION)
-        except requests.RequestException as exc:
+        except (requests.RequestException, RuntimeError) as exc:
             # Only the exception class name: check() results end up in API
             # responses, and full requests error text carries internal detail.
             result["error"] = f"Could not reach GitHub ({type(exc).__name__})"
@@ -273,8 +343,7 @@ class Updater:
             self._set(phase="error", error=str(exc))
 
     def _download(self, url, dest):
-        parsed = urlsplit(str(url or ""))
-        if parsed.scheme != "https" or parsed.hostname not in {"github.com", "objects.githubusercontent.com"}:
+        if not _trusted_https(url, _DOWNLOAD_HOSTS):
             raise RuntimeError("release download URL is not a trusted HTTPS GitHub address")
         partial = dest.with_suffix(dest.suffix + ".part")
         try:
@@ -283,7 +352,11 @@ class Updater:
             pass
         written = 0
         try:
-            with requests.get(url, headers=HEADERS, stream=True, timeout=DOWNLOAD_TIMEOUT) as r:
+            with requests.get(
+                url, headers=HEADERS, stream=True, timeout=DOWNLOAD_TIMEOUT,
+                allow_redirects=True,
+            ) as r:
+                _require_final_url(r, _DOWNLOAD_HOSTS, "release download")
                 r.raise_for_status()
                 total = int(r.headers.get("Content-Length") or 0)
                 if total < 0 or total > MAX_DOWNLOAD_BYTES:
@@ -336,13 +409,16 @@ class Updater:
         if not asset:
             raise RuntimeError("release checksum is missing — refusing to install")
         url = asset.get("browser_download_url")
-        parsed = urlsplit(str(url or ""))
-        if parsed.scheme != "https" or parsed.hostname != "github.com":
+        if not _trusted_https(url, _CHECKSUM_HOSTS):
             raise RuntimeError("release checksum URL is not trusted")
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=CHECK_TIMEOUT)
+            resp = requests.get(
+                url, headers=HEADERS, timeout=CHECK_TIMEOUT,
+                allow_redirects=True,
+            )
+            _require_final_url(resp, _CHECKSUM_HOSTS, "release checksum")
             resp.raise_for_status()
-        except requests.RequestException as exc:
+        except (requests.RequestException, RuntimeError) as exc:
             raise RuntimeError("release checksum could not be downloaded — refusing to install") from exc
         token = (resp.text or "").strip().split()[0] if (resp.text or "").strip() else ""
         if not _SHA256_RE.fullmatch(token):
@@ -373,6 +449,20 @@ class Updater:
             except OSError:
                 pass
             raise RuntimeError("could not create a rollback copy — update cancelled") from exc
+        try:
+            _write_update_health({
+                "version": 1,
+                "state": "awaiting_health",
+                "nonce": secrets.token_hex(16),
+                "staged_at": int(time.time()),
+                "executable": exe.name,
+            })
+        except OSError as exc:
+            try:
+                backup.unlink()
+            except OSError:
+                pass
+            raise RuntimeError("could not create the rollback health marker") from exc
         bat = _exe_dir() / "_et_update.bat"
         bat.write_text(updater_script(exe, new_path), encoding="ascii")
         # CREATE_NO_WINDOW (not DETACHED_PROCESS) keeps a console so the batch's
@@ -387,18 +477,57 @@ class Updater:
         os._exit(0)
 
     def cleanup_leftovers(self):
-        """Remove stale staging artifacts on launch. Never deletes the staged
-        .new.exe — that may be a downloaded update not yet applied, which the
-        next update run overwrites anyway. Both product names are cleaned so a
-        renamed install still collects its pre-rename leftovers."""
+        """Advance rollback health only after a live server has started.
+
+        The first replacement launch keeps the old executable and must remain
+        alive for a sustained window before its marker becomes healthy. Only a
+        later successful startup removes that rollback copy. Crashes and
+        malformed markers fail closed by retaining the known-good executable.
+        """
         if not getattr(sys, "frozen", False):
             return
-        for name in ("_et_update.bat", f"{_exe_stem()}.old.exe",
-                     "EliteTrader.old.exe", "Frameshift.old.exe"):
+        try:
+            (_exe_dir() / "_et_update.bat").unlink()
+        except OSError:
+            pass
+        marker = _read_update_health()
+        if not marker:
+            return
+        if marker.get("state") == "awaiting_health":
+            nonce = marker.get("nonce")
+            if not isinstance(nonce, str) or not re.fullmatch(r"[0-9a-f]{32}", nonce):
+                return
+            timer = threading.Timer(
+                HEALTH_CONFIRM_SECONDS, self._confirm_healthy_launch, args=(nonce,)
+            )
+            timer.daemon = True
+            timer.name = "update-health-confirm"
+            timer.start()
+            self._health_timer = timer
+            return
+        if marker.get("state") != "healthy":
+            return
+        for name in (f"{_exe_stem()}.old.exe", "EliteTrader.old.exe", "Frameshift.old.exe"):
             try:
                 (_exe_dir() / name).unlink()
             except OSError:
                 pass
+        try:
+            _update_health_path().unlink()
+        except OSError:
+            pass
+
+    def _confirm_healthy_launch(self, nonce):
+        marker = _read_update_health()
+        if not marker or marker.get("state") != "awaiting_health" or marker.get("nonce") != nonce:
+            return
+        marker["state"] = "healthy"
+        marker["healthy_at"] = int(time.time())
+        try:
+            _write_update_health(marker)
+        except OSError:
+            # Retaining the rollback copy is the safe failure mode.
+            return
 
 
 UPDATER = Updater()

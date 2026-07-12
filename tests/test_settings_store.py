@@ -17,6 +17,7 @@ with tempfile.TemporaryDirectory() as td:
     settings.SETTINGS_PATH = root / "settings.json"
     settings._cache = None
     try:
+        assert settings.get("eddn_extended_upload") is False
         saved = settings.update({"auto_update": False, "journal_dir": "X:/Journals"})
         assert saved["auto_update"] is False
         assert json.loads(settings.SETTINGS_PATH.read_text(encoding="utf-8"))["journal_dir"] == "X:/Journals"

@@ -70,7 +70,7 @@ class WindowApi:
         webview.create_window(str(title or "Browser"), url, width=1150, height=850)
 
 
-def _shutdown_runtime(server=None, listener=None, extensions=None):
+def _shutdown_runtime(server=None, watcher=None, listener=None, extensions=None):
     """Release background resources in dependency order.
 
     The HTTP listener closes first so no new work can arrive while the EDDN
@@ -81,6 +81,7 @@ def _shutdown_runtime(server=None, listener=None, extensions=None):
     logger.info("Frameshift shutdown started")
     cleanup = (
         ("HTTP server", getattr(server, "shutdown", None), {}),
+        ("journal watcher", getattr(watcher, "stop", None), {"timeout": 5}),
         ("EDDN listener", getattr(listener, "stop", None), {"timeout": 5}),
         ("extension host", getattr(extensions, "shutdown", None), {"wait": True}),
     )
@@ -90,8 +91,8 @@ def _shutdown_runtime(server=None, listener=None, extensions=None):
                 continue
             try:
                 result = action(**kwargs)
-                if name == "EDDN listener" and result is False:
-                    logger.warning("EDDN listener did not stop within the shutdown timeout")
+                if name in {"journal watcher", "EDDN listener"} and result is False:
+                    logger.warning("%s did not stop within the shutdown timeout", name)
                 else:
                     logger.info("Stopped %s", name)
             except Exception:
@@ -177,10 +178,12 @@ def main():
         return
 
     server = None
+    watcher = None
     listener = None
     try:
         state = AppState()
-        JournalWatcher(state).start()
+        watcher = JournalWatcher(state)
+        watcher.start()
 
         from elite.eddn import LISTENER
 
@@ -217,7 +220,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        _shutdown_runtime(server, listener, EXTENSIONS)
+        _shutdown_runtime(server, watcher, listener, EXTENSIONS)
 
 
 if __name__ == "__main__":

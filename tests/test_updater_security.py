@@ -1,6 +1,7 @@
 """The updater fails closed and never promotes a partial/unverified binary."""
 
 import hashlib
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -12,11 +13,12 @@ from elite.updater import MAX_DOWNLOAD_BYTES, Updater, parse_version
 
 
 class Response:
-    def __init__(self, body=b"", status=200, headers=None):
+    def __init__(self, body=b"", status=200, headers=None, url="https://github.com/example/project/releases/download/v3/asset"):
         self.body = body
         self.status_code = status
         self.headers = headers or {"Content-Length": str(len(body))}
         self.text = body.decode("ascii", errors="replace")
+        self.url = url
 
     def __enter__(self):
         return self
@@ -91,4 +93,50 @@ with tempfile.TemporaryDirectory() as td:
     else:
         raise AssertionError("oversized download was accepted")
 
-print("updater OK: mandatory SHA-256, trusted URLs, atomic bounded downloads")
+    # Initial URLs and every final redirect target are independently checked.
+    evil_redirect = Response(binary, url="https://attacker.example/payload.exe")
+    try:
+        with patch("elite.updater.requests.get", return_value=evil_redirect):
+            updater._download("https://github.com/example/release.exe", destination)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("cross-host download redirect was accepted")
+
+    evil_checksum = Response(digest.encode("ascii"), url="https://attacker.example/hash")
+    try:
+        with patch("elite.updater.requests.get", return_value=evil_checksum):
+            updater._verify(path, info)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("cross-host checksum redirect was accepted")
+
+    # Rollback survives the replacement's first healthy launch and is removed
+    # only when a later startup reaches the live-server cleanup point.
+    class Timer:
+        def __init__(self, _delay, function, args=()):
+            self.function, self.args, self.daemon, self.name = function, args, False, ""
+
+        def start(self):
+            pass
+
+    rollback = root / "Frameshift.old.exe"
+    rollback.write_bytes(binary)
+    marker = root / ".frameshift-update-health.json"
+    nonce = "a" * 32
+    marker.write_text(json.dumps({
+        "version": 1, "state": "awaiting_health", "nonce": nonce,
+    }), encoding="utf-8")
+    with patch("elite.updater._exe_dir", return_value=root), \
+            patch("elite.updater._exe_stem", return_value="Frameshift"), \
+            patch("elite.updater.threading.Timer", Timer), \
+            patch.object(sys, "frozen", True, create=True):
+        updater.cleanup_leftovers()
+        assert rollback.is_file(), "first launch discarded the rollback"
+        updater._confirm_healthy_launch(nonce)
+        assert json.loads(marker.read_text(encoding="utf-8"))["state"] == "healthy"
+        updater.cleanup_leftovers()
+        assert not rollback.exists() and not marker.exists()
+
+print("updater OK: SHA-256 integrity, redirect validation, retained rollback, atomic downloads")

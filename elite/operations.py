@@ -401,6 +401,12 @@ class OperationsBoard:
             changes["payload"] = _json(changes["payload"])
         conn = _connect()
         try:
+            # The HTTP server is intentionally threaded and a board is often
+            # open on several paired devices.  Acquire the write reservation
+            # before reading the current revision so concurrent field edits
+            # serialize against the latest committed record instead of both
+            # producing revision N+1 and silently losing the first writer.
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(f"SELECT * FROM {spec['table']} WHERE id=?", (record_id,)).fetchone()
             if not row:
                 raise KeyError("unknown operations record")
@@ -420,6 +426,9 @@ class OperationsBoard:
             return _decode_record(conn.execute(
                 f"SELECT * FROM {spec['table']} WHERE id=?", (record_id,)
             ).fetchone())
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 

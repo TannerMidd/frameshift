@@ -9,13 +9,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 _tmp = tempfile.TemporaryDirectory()
 os.environ["ET_DATA_DIR"] = _tmp.name
 
-from elite import settings  # noqa: E402
+from elite import marketdb, settings  # noqa: E402
 from elite.server import create_app  # noqa: E402
 from elite.state import AppState  # noqa: E402
 
 
 settings.update({"pinned_blueprints": [{"name": "FSD Increased Range", "grade": 5}]})
 state = AppState()
+commander_id = marketdb.ensure_commander_profile("Engineering API Test")
+state.update(commander="Engineering API Test", commander_id=commander_id)
 state.materials["Encoded"]["disruptedwakeechoes"] = {
     "symbol": "disruptedwakeechoes", "name": "Atypical Disrupted Wake Echoes", "count": 3,
 }
@@ -28,6 +30,7 @@ state.cargo_inventory = [{"symbol": "hnshockmount", "name": "HN Shock Mount", "c
 app = create_app(state)
 app.testing = True
 client = app.test_client()
+profile_headers = {"X-Frameshift-Commander": commander_id}
 
 response = client.get("/api/engineering")
 assert response.status_code == 200, response.get_json()
@@ -36,9 +39,10 @@ assert body["catalog"]["stats"]["groups"] == 505
 assert len(body["catalog"]["groups"]) == 505
 assert body["rolls_per_grade"] == {"1": 1, "2": 2, "3": 3, "4": 4, "5": 5}
 assert body["wishlist"]["entries"][0]["id"] == "frame-shift-drive--increased-fsd-range"
-assert settings.get("pinned_blueprints")[0]["id"] == "frame-shift-drive--increased-fsd-range"
+assert body["commander_id"] == commander_id
+assert settings.get("pinned_blueprints") == []
 
-response = client.post("/api/engineering/pin", json={
+response = client.post("/api/engineering/pin", headers=profile_headers, json={
     "id": "suit--artemis", "current_grade": 2, "target_grade": 4, "quantity": 2,
 })
 assert response.status_code == 200, response.get_json()
@@ -49,9 +53,10 @@ assert items["suit--artemis"]["current_grade"] == 2
 assert items["suit--artemis"]["target_grade"] == 4
 assert items["suit--artemis"]["quantity"] == 2
 
-response = client.post("/api/engineering/pin", json={"id": "not-a-recipe"})
+response = client.post(
+    "/api/engineering/pin", headers=profile_headers, json={"id": "not-a-recipe"})
 assert response.status_code == 400
-response = client.post("/api/engineering/pin", json={
+response = client.post("/api/engineering/pin", headers=profile_headers, json={
     "id": "frame-shift-drive--increased-fsd-range", "action": "unpin",
 })
 assert response.status_code == 200

@@ -59,12 +59,13 @@ try:
     assert urls[0] == "http://192.168.1.65:8667/?pair=secret", urls
     assert startup_pairing_url("/?pair=secret", 8667) == urls[0]
 
-    # If an authenticated admin opens Settings over a specific LAN address,
-    # preserve that known-working host for links created from that browser.
+    # A request host remains an alternate, not the default. Opening Settings
+    # over a VPN must not replace the ranked physical LAN address in copy/QR.
     urls = pairing_urls(
-        "/?pair=secret", 8667, preferred_host="10.20.30.4:8667"
+        "/?pair=secret", 8667, preferred_host="10.5.0.2:8667"
     )
-    assert urls[0] == "http://10.20.30.4:8667/?pair=secret", urls
+    assert urls[0] == "http://192.168.1.65:8667/?pair=secret", urls
+    assert "http://10.5.0.2:8667/?pair=secret" in urls
 
     with tempfile.TemporaryDirectory() as td:
         import elite.qrcode as qrcode
@@ -120,6 +121,21 @@ try:
     assert pairing_urls("/?pair=secret", 8667) == []
     assert startup_pairing_url("/?pair=secret", 8667) == \
         "http://127.0.0.1:8667/?pair=secret"
+finally:
+    network.lan_addresses = original_addresses
+    network.socket.gethostname = original_hostname
+
+# A request parsed by Flask supplies a bare IPv6 literal. Preserve and bracket
+# it rather than reparsing ``fd00::1`` as hostname ``fd00``.
+network.lan_addresses = lambda **_kwargs: []
+network.socket.gethostname = lambda: ""
+try:
+    assert pairing_urls("/?pair=secret", 8667, preferred_host="fd12:3456::1") == [
+        "http://[fd12:3456::1]:8667/?pair=secret"
+    ]
+    assert pairing_urls("/?pair=secret", 8667, preferred_host="[fd12:3456::2]:8667") == [
+        "http://[fd12:3456::2]:8667/?pair=secret"
+    ]
 finally:
     network.lan_addresses = original_addresses
     network.socket.gethostname = original_hostname

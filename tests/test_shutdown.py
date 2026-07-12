@@ -1,6 +1,7 @@
 """Background services release sockets, threads, and database handles."""
 
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -9,10 +10,11 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import _shutdown_runtime
+from elite.journal import JournalWatcher
+from elite.state import AppState
 from elite.eddn import EddnListener
 from elite.extensions import ExtensionManager
 from elite.server import ServerThread
-from elite.state import AppState
 
 
 class FakeAgain(Exception):
@@ -167,17 +169,29 @@ def test_cleanup_order_and_fault_isolation():
     try:
         _shutdown_runtime(
             Component("http", fail=True),
+            Component("journal"),
             Component("eddn"),
             Component("extensions"),
         )
     finally:
         app.logging.shutdown = original_logging_shutdown
         app.logging.getLogger = original_get_logger
-    assert calls == ["http", "eddn", "extensions", "logging"], calls
+    assert calls == ["http", "journal", "eddn", "extensions", "logging"], calls
+
+
+def test_journal_watcher_shutdown():
+    with tempfile.TemporaryDirectory() as temp:
+        watcher = JournalWatcher(AppState(), journal_dir=temp)
+        worker = watcher.start()
+        assert watcher.start() is worker
+        assert watcher.stop(timeout=2)
+        assert not worker.is_alive()
+        assert watcher.stop(timeout=2)  # idempotent
 
 
 test_eddn_shutdown()
 test_http_shutdown()
 test_extension_executor_shutdown()
+test_journal_watcher_shutdown()
 test_cleanup_order_and_fault_isolation()
 print("shutdown OK: EDDN/SQLite/ZMQ, HTTP, extensions, logging")

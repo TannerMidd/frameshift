@@ -45,8 +45,14 @@ An advanced extension may specify a command relative to its own directory:
 {"command": ["adapter.exe"], "permissions": ["read:journal", "emit:alert"]}
 ```
 
-Process adapters are disabled until the extension directory contains a file
-named `APPROVED`. Frameshift sends one JSON document on stdin and accepts a
-JSON action or list of actions on stdout. Each invocation has a three-second
-timeout. The permission list limits data and actions exposed by Frameshift,
-but it is not an operating-system sandbox; only approve code you trust.
+Process adapters are disabled until an administrator explicitly approves them
+in Frameshift. Approval is stored in Frameshift-owned state outside the pack
+and is bound to a SHA-256 fingerprint of every file in the reviewed pack.
+An `APPROVED` file shipped inside a pack has no effect, and any pack-content
+change automatically requires fresh approval.
+
+Frameshift sends one JSON document on stdin and accepts a JSON action or list
+of actions on stdout. Each invocation has a three-second timeout. The
+permission list limits data and actions exposed by Frameshift, but this is not
+an operating-system sandbox; inspect and approve only code you trust. Revoking
+approval stops future process invocations without deleting the pack.

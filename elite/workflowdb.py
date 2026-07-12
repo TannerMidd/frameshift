@@ -124,7 +124,31 @@ class WorkflowStore:
             (self.commander_id, self.workflow, self._json(state), utc_iso()),
         )
 
-    def mutate(self, callback) -> tuple[dict, bool]:
+    def _archive_in_transaction(self, conn, summary: dict | None) -> bool:
+        """Insert a completed session using the caller's open transaction."""
+        if not summary:
+            return False
+        session_key = summary.get("session_key")
+        if not session_key:
+            raise ValueError("archived summary requires session_key")
+        before = conn.total_changes
+        conn.execute(
+            "INSERT OR IGNORE INTO specialist_history("
+            "commander_id,workflow,session_key,started_ts,ended_ts,summary_json,created_at)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (
+                self.commander_id,
+                self.workflow,
+                str(session_key),
+                summary.get("started_ts"),
+                summary.get("ended_ts"),
+                self._json(summary),
+                utc_iso(),
+            ),
+        )
+        return conn.total_changes > before
+
+    def mutate(self, callback, *, archive=None) -> tuple[dict, bool]:
         """Atomically mutate a deep copy of current state.
 
         The callback returns truthy when it changed state.  Returning false
@@ -142,6 +166,8 @@ class WorkflowStore:
             changed = bool(callback(candidate))
             if changed:
                 self._write(conn, candidate)
+                if archive is not None:
+                    self._archive_in_transaction(conn, archive(candidate))
             conn.commit()
             return (candidate if changed else state), changed
         except Exception:
@@ -150,7 +176,9 @@ class WorkflowStore:
         finally:
             conn.close()
 
-    def apply_event(self, event: dict, reducer, uid: str | None = None) -> tuple[dict, bool]:
+    def apply_event(
+        self, event: dict, reducer, uid: str | None = None, *, archive=None,
+    ) -> tuple[dict, bool]:
         """Apply one relevant event exactly once and save the resulting state."""
         if not isinstance(event, dict) or not event.get("event"):
             raise ValueError("event must be an object with an event field")
@@ -182,6 +210,8 @@ class WorkflowStore:
                     (self.commander_id, self.workflow, key, event_ts, event_type),
                 )
                 self._write(conn, candidate)
+                if archive is not None:
+                    self._archive_in_transaction(conn, archive(candidate))
             conn.commit()
             return (candidate if changed else state), changed
         except Exception:
@@ -196,22 +226,7 @@ class WorkflowStore:
             raise ValueError("session_key is required")
         conn = marketdb.connect_user()
         try:
-            before = conn.total_changes
-            conn.execute(
-                "INSERT OR IGNORE INTO specialist_history("
-                "commander_id,workflow,session_key,started_ts,ended_ts,summary_json,created_at)"
-                " VALUES(?,?,?,?,?,?,?)",
-                (
-                    self.commander_id,
-                    self.workflow,
-                    str(session_key),
-                    summary.get("started_ts"),
-                    summary.get("ended_ts"),
-                    self._json(summary),
-                    utc_iso(),
-                ),
-            )
-            inserted = conn.total_changes > before
+            inserted = self._archive_in_transaction(conn, {**summary, "session_key": session_key})
             conn.commit()
             return inserted
         finally:

@@ -371,11 +371,11 @@ class MiningTracker:
     def observe_event(self, event: dict, event_uid: str | None = None) -> dict:
         if not isinstance(event, dict) or event.get("event") not in JOURNAL_EVENTS:
             return self.snapshot()
-        state, changed = self.store.apply_event(event, self._reduce, event_uid)
-        if changed and event["event"] in {"Shutdown", "Died"}:
-            summary = _present(state).get("session")
-            if summary:
-                self.store.archive(summary["session_key"], summary)
+        closing = event["event"] in {"Shutdown", "Died"}
+        state, _changed = self.store.apply_event(
+            event, self._reduce, event_uid,
+            archive=(lambda value: _present(value).get("session")) if closing else None,
+        )
         return _present(state)
 
     def end(self, reason="manual", timestamp=None) -> dict:
@@ -388,10 +388,9 @@ class MiningTracker:
             session.update(active=False, ended_ts=ts, last_event_ts=ts, end_reason=str(reason))
             return True
 
-        state, changed = self.store.mutate(change)
-        summary = _present(state).get("session")
-        if changed and summary:
-            self.store.archive(summary["session_key"], summary)
+        state, _changed = self.store.mutate(
+            change, archive=lambda value: _present(value).get("session")
+        )
         return _present(state)
 
     def snapshot(self) -> dict:

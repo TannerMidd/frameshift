@@ -134,6 +134,15 @@ class AppState:
             for key, value in kwargs.items():
                 setattr(self, key, value)
 
+    def update_for_commander(self, commander_id, **kwargs):
+        """Atomically apply request results only while their profile is active."""
+        with self._lock:
+            if not commander_id or self.commander_id != commander_id:
+                return False
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+            return True
+
     def reset_commander_context(self, *, commander=None, commander_id=None):
         """Atomically discard state owned by the previous commander.
 

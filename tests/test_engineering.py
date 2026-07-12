@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 _tmp = tempfile.TemporaryDirectory()
 os.environ["ET_DATA_DIR"] = _tmp.name  # isolate settings.json/db
 
-from elite import blueprints, settings  # noqa: E402
+from elite import blueprints, marketdb, wishlist  # noqa: E402
 from elite.journal import JournalWatcher  # noqa: E402
 from elite.state import AppState  # noqa: E402
 
@@ -68,10 +68,14 @@ print("blueprint math OK: deterministic requirements, conversions, deficits, tra
 
 # ---------- journal: ready-to-engineer one-shot callout ----------
 
-settings.update({"pinned_blueprints": [{"name": "FSD Increased Range", "grade": 5}]})
 with tempfile.TemporaryDirectory() as td:
     state = AppState()
     w = JournalWatcher(state, journal_dir=td)
+    w._activate_commander("Engineering Test")
+    pins, _ = blueprints.normalize_wishlist([
+        {"name": "FSD Increased Range", "grade": 5}
+    ])
+    wishlist.save(marketdb.commander_profile_id("Engineering Test"), pins)
     w._live = True
     mats = {"Raw": {}, "Manufactured": {}, "Encoded": {}}
     for sym, count in inv_full.items():
@@ -85,7 +89,7 @@ with tempfile.TemporaryDirectory() as td:
     w.handle_event({"timestamp": "t", "event": "MaterialCollected",
                     "Category": "Manufactured", "Name": "chemicalprocessors", "Count": 1})
     alerts = [a for a in state.snapshot()["alerts"] if a["code"] == "blueprint"]
-    assert len(alerts) == 1 and "FSD Increased Range" in alerts[0]["say"], alerts
+    assert len(alerts) == 1 and "Increased FSD Range" in alerts[0]["say"], alerts
 
     # Further pickups while already craftable must not repeat the callout.
     w.handle_event({"timestamp": "t", "event": "MaterialCollected",

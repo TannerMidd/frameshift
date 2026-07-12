@@ -8,8 +8,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 _tmp = tempfile.TemporaryDirectory()
 os.environ["ET_DATA_DIR"] = _tmp.name
+os.environ["ET_EDDN_EXTENDED_UPLOAD"] = "1"
 
-from elite import eddn_upload  # noqa: E402
+from elite import eddn_upload, settings  # noqa: E402
 
 
 uploader = eddn_upload.EddnUploader()
@@ -35,17 +36,31 @@ location = {
     "body_id": 7,
 }
 
+# Market consent does not silently opt a commander into the broader journal
+# and snapshot contribution classes.
+settings.update({"eddn_upload": True, "eddn_extended_upload": False})
+assert eddn_upload.enabled() is True and eddn_upload.extended_enabled() is False
+uploader.maybe_publish_journal({
+    "timestamp": "2026-07-12T11:59:59Z", "event": "Location",
+    "StarSystem": location["system"], "SystemAddress": location["system_address"],
+}, "TEST", location)
+assert captured == []
+settings.update({"eddn_extended_upload": True})
+
 # General journal schemas retain scientific data but remove localized/private
 # fields recursively and use the trusted complete location tuple.
 uploader.maybe_publish_journal({
     "timestamp": "2026-07-12T12:00:00Z",
-    "event": "Docked",
+    "event": "Location",
     "StationName": "Jameson Memorial",
     "Factions": [{
         "Name": "Pilots Federation", "MyReputation": 100,
         "FactionState_Localised": "None",
     }],
     "ActiveFine": 500,
+    "Commander": "PRIVATE NAME",
+    "FID": "F123456",
+    "FutureUnknownField": "must stay local",
     "StarSystem": "Shinrarta Dezhra",
     "SystemAddress": 3932277478106,
 }, "TEST", location, "4.4.0.3", "r1", horizons=True, odyssey=True)
@@ -53,6 +68,7 @@ schema, message, commander, gv, _gb, _key = captured.pop()
 assert schema == "journal" and commander == "TEST" and gv == "4.4.0.3"
 assert message["StarPos"] == location["star_pos"]
 assert "ActiveFine" not in message and "MyReputation" not in message["Factions"][0]
+assert not ({"Commander", "FID", "FutureUnknownField"} & set(message))
 assert not any(key.endswith("_Localised") for key in message["Factions"][0])
 assert message["horizons"] is True and message["odyssey"] is True
 
@@ -127,10 +143,9 @@ uploader.maybe_publish_journal({
     "timestamp": "2026-07-12T12:00:07Z", "event": "FSSSignalDiscovered",
     "SystemAddress": 3932277478106, "SignalName": "Pending Carrier", "IsStation": True,
 }, "TEST", location)
-real_enabled = eddn_upload.enabled
-eddn_upload.enabled = lambda: False
+settings.update({"eddn_extended_upload": False})
 uploader.flush_fss_signals(location, "TEST", preserve_unmatched=True)
-eddn_upload.enabled = real_enabled
+settings.update({"eddn_extended_upload": True})
 assert uploader._pending_signals == [] and captured == []
 
 # Outfitting/Shipyard files are transformed into the v2 string arrays and

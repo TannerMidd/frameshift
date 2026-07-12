@@ -18,6 +18,11 @@ SETTINGS_PATH = marketdb.DATA_DIR / "settings.json"
 # key -> default. Env vars seed the boolean toggles that used to be flags.
 DEFAULTS = {
     "eddn_upload": os.environ.get("ET_EDDN_UPLOAD", "1") != "0",
+    # Broader journal/snapshot contribution is intentionally a separate,
+    # informed opt-in.  The long-standing anonymous commodity contribution
+    # remains enabled by default; exploration, route, docking and station
+    # inventory observations do not silently inherit that consent.
+    "eddn_extended_upload": os.environ.get("ET_EDDN_EXTENDED_UPLOAD", "0") == "1",
     "auto_update": os.environ.get("ET_AUTO_UPDATE", "1") != "0",
     "exclude_carriers": True,   # keep fleet carriers out of routes/searches
     "exclude_surface": False,   # keep planetary/settlement stations out

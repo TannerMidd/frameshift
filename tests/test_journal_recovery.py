@@ -86,31 +86,51 @@ assert conn.execute(
 conn.close()
 
 # Startup/poll failures are reported and do not disappear into bare `pass`
-# handlers. Stop the otherwise-infinite loop after its first sleep.
+# handlers. Let the chronological import fail once and retry, then stop after
+# the first live-poll wait.
 contexts = []
 watcher = JournalWatcher(AppState(), journal_dir=root)
 watcher.bootstrap = lambda: (_ for _ in ()).throw(RuntimeError("bootstrap"))
 watcher._probe_game = lambda: (_ for _ in ()).throw(RuntimeError("probe"))
-watcher.import_trade_history = lambda: (_ for _ in ()).throw(RuntimeError("history"))
+history_calls = {"count": 0}
+
+
+def fail_history_once():
+    history_calls["count"] += 1
+    if history_calls["count"] == 1:
+        raise RuntimeError("history")
+    return True
+
+
+watcher.import_trade_history = fail_history_once
 watcher._ensure_journal_dir = lambda: (_ for _ in ()).throw(RuntimeError("poll"))
 watcher._log_background_failure = lambda context, exc: contexts.append((context, type(exc).__name__))
 
-import elite.journal as journal_module  # noqa: E402
+original_wait = watcher._stop_event.wait
+wait_calls = {"count": 0}
 
-original_sleep = journal_module.time.sleep
-journal_module.time.sleep = lambda _seconds: (_ for _ in ()).throw(StopIteration())
+
+def stop_after_retry(_seconds):
+    wait_calls["count"] += 1
+    if wait_calls["count"] == 1:
+        return False
+    raise StopIteration()
+
+
+watcher._stop_event.wait = stop_after_retry
 try:
     try:
         watcher.run_forever()
     except StopIteration:
         pass
 finally:
-    journal_module.time.sleep = original_sleep
+    watcher._stop_event.wait = original_wait
 
 assert [context for context, _kind in contexts] == [
-    "initial game process probe", "journal bootstrap", "game process probe",
-    "journal history import",
+    "initial game process probe", "journal history import", "journal bootstrap",
+    "game process probe",
     "journal watcher poll",
 ]
+assert history_calls["count"] == 2
 
 print("journal recovery OK: failed reducers retry and watcher failures are diagnosed")

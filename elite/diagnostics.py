@@ -146,6 +146,30 @@ def _redact_local_paths(text: str) -> str:
         alternate = candidate.replace("\\", "/") if "\\" in candidate else candidate.replace("/", "\\")
         if alternate != candidate:
             text = re.sub(re.escape(alternate), "<local-path>", text, flags=re.IGNORECASE)
+    return _redact_auth_material(text)
+
+
+def _redact_auth_material(text: str) -> str:
+    """Remove bearer, cookie and one-time-link credentials from copied logs."""
+    # Request lines and logged URLs: retain the parameter name for diagnosis,
+    # but never retain its credential value.
+    text = re.sub(
+        r"(?i)([?&](?:pair|token|access_token|auth_token|api_key)=)[^&#\s\"']+",
+        r"\1<redacted>",
+        text,
+    )
+    # Structured payloads occasionally logged by dependencies.
+    text = re.sub(
+        r'(?i)([\"\'](?:pair|token|access_token|auth_token|api_key|cookie|authorization)[\"\']\s*:\s*[\"\'])[^\"\']*',
+        r"\1<redacted>",
+        text,
+    )
+    text = re.sub(
+        r"(?im)^(Authorization\s*:\s*)(?:Bearer\s+)?\S+",
+        r"\1<redacted>",
+        text,
+    )
+    text = re.sub(r"(?im)^(Cookie\s*:\s*).+$", r"\1<redacted>", text)
     return text
 
 

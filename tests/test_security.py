@@ -127,6 +127,50 @@ with tempfile.TemporaryDirectory() as td:
                       environ_base={"REMOTE_ADDR": "192.168.1.60"}).status_code == 403
     assert remote.get("/api/journal-dir/validate", headers=reader_headers,
                       environ_base={"REMOTE_ADDR": "192.168.1.60"}).status_code == 403
+
+    # Process-extension approval is an admin operation. A local/admin request
+    # reaches the manager, while read/control capabilities are rejected before
+    # any approval state can change.
+    from elite import extensions
+
+    original_extensions = extensions.EXTENSIONS
+
+    class FakeExtensions:
+        def __init__(self):
+            self.calls = []
+
+        def approve_process(self, extension_id):
+            self.calls.append(("approve", extension_id))
+            return {"loaded": [{"id": extension_id, "approved": True}]}
+
+        def revoke_process(self, extension_id):
+            self.calls.append(("revoke", extension_id))
+            return {"loaded": [{"id": extension_id, "approved": False}]}
+
+    fake_extensions = FakeExtensions()
+    extensions.EXTENSIONS = fake_extensions
+    try:
+        approved = local.post("/api/extensions/process.pack/approve")
+        revoked = local.post("/api/extensions/process.pack/revoke")
+        assert approved.status_code == 200 and revoked.status_code == 200
+        assert fake_extensions.calls == [
+            ("approve", "process.pack"), ("revoke", "process.pack"),
+        ]
+        denied = remote.post(
+            "/api/extensions/process.pack/approve", headers=reader_headers,
+            environ_base={"REMOTE_ADDR": "192.168.1.60"},
+        )
+        assert denied.status_code == 403 and denied.get_json()["required_scope"] == "admin"
+        manager.update_device(reader_device["id"], scopes=["control"])
+        denied_control = remote.post(
+            "/api/extensions/process.pack/revoke", headers=reader_headers,
+            environ_base={"REMOTE_ADDR": "192.168.1.60"},
+        )
+        assert denied_control.status_code == 403
+        manager.update_device(reader_device["id"], scopes=["read"])
+        assert len(fake_extensions.calls) == 2
+    finally:
+        extensions.EXTENSIONS = original_extensions
     response = remote.get("/api/speak?text=nope", headers={**reader_headers, **same_origin},
                           environ_base={"REMOTE_ADDR": "192.168.1.60"})
     assert response.status_code == 403  # read-only device lacks control first

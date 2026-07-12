@@ -20,7 +20,7 @@ from pathlib import Path
 
 
 ALIAS = "commander"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # These tables are part of the durable commander contract.  New features must
 # add their tables here (or call ensure_schema with their own idempotent DDL),
@@ -109,8 +109,126 @@ PROFILE_SCOPED_TABLES = frozenset(
         "ledger_events", "ledger_journal_files",
         "timing_observations", "timing_pending",
         "specialist_state", "specialist_events", "specialist_history",
+        "engineering_wishlist",
     }
 )
+
+# Rows in these tables are user-authored local preferences created before a
+# journal identity was available, so the first real profile may safely claim
+# them. Journal-derived analytics are deliberately excluded: an old v2.0
+# database can contain several commanders mixed under ``default`` and those
+# rows must instead remain quarantined while the journal sweep reconstructs
+# correctly attributed copies.
+DEFAULT_PROFILE_ADOPTABLE_TABLES = frozenset(
+    {
+        "tracked_markets", "watches", "commander_objectives", "commander_alerts",
+        "engineering_wishlist",
+    }
+)
+
+
+# Early development databases gained commander_id with ALTER TABLE. SQLite
+# cannot alter a primary key, so those databases still rejected the same
+# logical key for a second commander. Canonical definitions let startup
+# transactionally rebuild only the affected direct-key tables.
+_PROFILE_KEY_SCHEMAS = {
+    "trade_log": (("commander_id", "ts", "event", "symbol", "total"), """
+        CREATE TABLE {name}(
+            commander_id TEXT NOT NULL DEFAULT 'default', ts INTEGER NOT NULL,
+            event TEXT NOT NULL, symbol TEXT NOT NULL, name TEXT,
+            count INTEGER NOT NULL DEFAULT 0, price INTEGER NOT NULL DEFAULT 0,
+            total INTEGER NOT NULL DEFAULT 0, profit INTEGER,
+            PRIMARY KEY(commander_id,ts,event,symbol,total)) WITHOUT ROWID
+    """),
+    "balance_log": (("commander_id", "ts"), """
+        CREATE TABLE {name}(
+            commander_id TEXT NOT NULL DEFAULT 'default', ts INTEGER NOT NULL,
+            balance INTEGER NOT NULL, PRIMARY KEY(commander_id,ts)) WITHOUT ROWID
+    """),
+    "income_log": (("commander_id", "ts", "category", "detail", "amount"), """
+        CREATE TABLE {name}(
+            commander_id TEXT NOT NULL DEFAULT 'default', ts INTEGER NOT NULL,
+            category TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '',
+            amount INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(commander_id,ts,category,detail,amount)) WITHOUT ROWID
+    """),
+    "imported_journals": (("commander_id", "filename"), """
+        CREATE TABLE {name}(
+            commander_id TEXT NOT NULL DEFAULT 'default', filename TEXT NOT NULL,
+            PRIMARY KEY(commander_id,filename)) WITHOUT ROWID
+    """),
+    "tracked_markets": (("commander_id", "market_id"), """
+        CREATE TABLE {name}(
+            commander_id TEXT NOT NULL DEFAULT 'default', market_id INTEGER NOT NULL,
+            added_ts INTEGER NOT NULL, PRIMARY KEY(commander_id,market_id)) WITHOUT ROWID
+    """),
+    "specialist_state": (("commander_id", "workflow"), """
+        CREATE TABLE {name}(
+            commander_id TEXT NOT NULL, workflow TEXT NOT NULL,
+            state_json TEXT NOT NULL, updated_at TEXT NOT NULL,
+            PRIMARY KEY(commander_id,workflow)) WITHOUT ROWID
+    """),
+    "specialist_events": (("commander_id", "workflow", "event_uid"), """
+        CREATE TABLE {name}(
+            commander_id TEXT NOT NULL, workflow TEXT NOT NULL,
+            event_uid TEXT NOT NULL, event_ts INTEGER NOT NULL, event_type TEXT NOT NULL,
+            PRIMARY KEY(commander_id,workflow,event_uid)) WITHOUT ROWID
+    """),
+    "ledger_journal_files": (("commander_id", "file_key"), """
+        CREATE TABLE {name}(
+            commander_id TEXT NOT NULL, file_key TEXT NOT NULL, size_bytes INTEGER,
+            mtime_ns INTEGER, content_hash TEXT, last_line INTEGER NOT NULL DEFAULT 0,
+            event_count INTEGER NOT NULL DEFAULT 0, first_event_ts INTEGER,
+            last_event_ts INTEGER, complete INTEGER NOT NULL DEFAULT 0,
+            imported_at TEXT, error TEXT, PRIMARY KEY(commander_id,file_key)) WITHOUT ROWID
+    """),
+    "timing_pending": (("commander_id", "activity", "context_key"), """
+        CREATE TABLE {name}(
+            commander_id TEXT NOT NULL, activity TEXT NOT NULL,
+            context_key TEXT NOT NULL DEFAULT '', started_at INTEGER NOT NULL,
+            source_event TEXT, PRIMARY KEY(commander_id,activity,context_key)) WITHOUT ROWID
+    """),
+}
+
+_PROFILE_UNIQUE_SCHEMAS = {
+    "ledger_events": (("commander_id", "event_uid"), """
+        CREATE TABLE {name}(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, commander_id TEXT NOT NULL,
+            event_uid TEXT NOT NULL, event_ts INTEGER NOT NULL, timestamp TEXT,
+            event_type TEXT NOT NULL, category TEXT NOT NULL, system TEXT, body TEXT,
+            station TEXT, source_file TEXT, source_line INTEGER, payload BLOB NOT NULL,
+            payload_size INTEGER NOT NULL, stored_size INTEGER NOT NULL,
+            created_at TEXT NOT NULL, UNIQUE(commander_id,event_uid))
+    """),
+    "timing_observations": ((
+        "commander_id", "activity", "context_key", "started_at", "ended_at",
+    ), """
+        CREATE TABLE {name}(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, commander_id TEXT NOT NULL,
+            activity TEXT NOT NULL, context_key TEXT NOT NULL DEFAULT '',
+            started_at INTEGER NOT NULL, ended_at INTEGER NOT NULL,
+            duration_s REAL NOT NULL, source TEXT NOT NULL DEFAULT 'journal',
+            created_at TEXT NOT NULL,
+            UNIQUE(commander_id,activity,context_key,started_at,ended_at))
+    """),
+    "specialist_history": (("commander_id", "workflow", "session_key"), """
+        CREATE TABLE {name}(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, commander_id TEXT NOT NULL,
+            workflow TEXT NOT NULL, session_key TEXT NOT NULL, started_ts INTEGER,
+            ended_ts INTEGER, summary_json TEXT NOT NULL, created_at TEXT NOT NULL,
+            UNIQUE(commander_id,workflow,session_key))
+    """),
+    "commander_objectives": (("commander_id", "source", "source_ref"), """
+        CREATE TABLE {name}(
+            id TEXT PRIMARY KEY, commander_id TEXT NOT NULL, source TEXT NOT NULL,
+            source_ref TEXT, title TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'other',
+            status TEXT NOT NULL DEFAULT 'open', priority INTEGER NOT NULL DEFAULT 50,
+            system TEXT, station TEXT, body TEXT, estimated_seconds INTEGER,
+            deadline INTEGER, reward INTEGER, risk TEXT, payload TEXT NOT NULL DEFAULT '{}',
+            dependencies TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL, UNIQUE(commander_id,source,source_ref))
+    """),
+}
 
 
 class CommanderDatabaseError(RuntimeError):
@@ -130,12 +248,72 @@ def _configure(conn, *, wal=True):
     conn.execute("PRAGMA foreign_keys = ON")
 
 
+def _primary_key(conn, table):
+    rows = conn.execute(f"PRAGMA table_info({quote_identifier(table)})").fetchall()
+    return tuple(row[1] for row in sorted(rows, key=lambda item: item[5]) if row[5])
+
+
+def _unique_keys(conn, table):
+    result = set()
+    for row in conn.execute(f"PRAGMA index_list({quote_identifier(table)})"):
+        if not row[2]:
+            continue
+        columns = tuple(
+            item[2] for item in conn.execute(
+                f"PRAGMA index_info({quote_identifier(row[1])})"
+            )
+        )
+        result.add(columns)
+    return result
+
+
+def _rebuild_profile_key(conn, table, create_sql):
+    """Replace an ALTER-upgraded table with its real profile-aware key."""
+    temporary = f"__profile_key_v{SCHEMA_VERSION}_{table}"
+    conn.execute(f"DROP TABLE IF EXISTS {quote_identifier(temporary)}")
+    conn.execute(create_sql.format(name=quote_identifier(temporary)))
+    source_info = conn.execute(
+        f"PRAGMA table_info({quote_identifier(table)})"
+    ).fetchall()
+    target_info = conn.execute(
+        f"PRAGMA table_info({quote_identifier(temporary)})"
+    ).fetchall()
+    source_columns = {row[1] for row in source_info}
+    insert_columns = []
+    select_values = []
+    for row in target_info:
+        column = row[1]
+        if column in source_columns:
+            insert_columns.append(quote_identifier(column))
+            select_values.append(
+                f"COALESCE({quote_identifier(column)}, '')"
+                if table == "income_log" and column == "detail"
+                else quote_identifier(column)
+            )
+        elif column == "commander_id":
+            insert_columns.append(quote_identifier(column))
+            select_values.append("'default'")
+        elif row[3] and row[4] is None:
+            raise CommanderDatabaseError(
+                f"cannot rebuild {table}: required legacy column is missing: {column}"
+            )
+    conn.execute(
+        f"INSERT INTO {quote_identifier(temporary)} ({', '.join(insert_columns)})"
+        f" SELECT {', '.join(select_values)} FROM {quote_identifier(table)}"
+    )
+    conn.execute(f"DROP TABLE {quote_identifier(table)}")
+    conn.execute(
+        f"ALTER TABLE {quote_identifier(temporary)} RENAME TO {quote_identifier(table)}"
+    )
+
+
 def _ensure_profile_columns(conn):
     """Upgrade an early/pre-release commander.db without losing its rows.
 
     Fresh v2 databases have compound profile-aware primary keys.  Databases
-    created by development builds may have the older keys, so at minimum add
-    the discriminator in place.  The production market.db migration always
+    created by development builds may have older primary/unique keys. Add the
+    discriminator, then transactionally rebuild known tables whose SQLite key
+    could not be changed in place. The production market.db migration always
     targets the fresh compound-key schema.
     """
     tables = {
@@ -158,6 +336,15 @@ def _ensure_profile_columns(conn):
                 f"ALTER TABLE {quote_identifier(table)}"
                 " ADD COLUMN commander_id TEXT NOT NULL DEFAULT 'default'"
             )
+    # Adding the discriminator above does not change an existing primary key.
+    # Rebuild after every table has the column so all retained rows are copied
+    # under the quarantined default identity in one startup transaction.
+    for table, (expected_key, create_sql) in _PROFILE_KEY_SCHEMAS.items():
+        if table in tables and _primary_key(conn, table) != expected_key:
+            _rebuild_profile_key(conn, table, create_sql)
+    for table, (expected_key, create_sql) in _PROFILE_UNIQUE_SCHEMAS.items():
+        if table in tables and expected_key not in _unique_keys(conn, table):
+            _rebuild_profile_key(conn, table, create_sql)
 
 
 def _ensure_default_profile(conn):
@@ -183,6 +370,10 @@ def connect(path):
     try:
         _configure(conn)
         conn.executescript(USER_SCHEMA)
+        # SQLite cannot retrofit compound keys with ALTER TABLE.  Keep the
+        # create/copy/drop/rename repair and its schema marker in one explicit
+        # transaction so a power loss cannot strand a half-rebuilt user DB.
+        conn.execute("BEGIN IMMEDIATE")
         _ensure_profile_columns(conn)
         _ensure_default_profile(conn)
         conn.execute(
@@ -192,6 +383,7 @@ def connect(path):
         conn.commit()
         return conn
     except Exception:
+        conn.rollback()
         conn.close()
         raise
 

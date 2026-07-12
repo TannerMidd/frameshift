@@ -4,7 +4,8 @@ Every message is built for a concrete schema rather than forwarding raw game
 JSON.  That keeps commander-specific fields out, prevents future journal fields
 from invalidating strict schemas, and makes location augmentation fail closed.
 
-Disable with ET_EDDN_UPLOAD=0.
+Commodity contribution uses ET_EDDN_UPLOAD (default on). Broader journal and
+snapshot contribution requires ET_EDDN_EXTENDED_UPLOAD=1 or the Settings opt-in.
 """
 
 import gzip
@@ -111,11 +112,6 @@ JOURNAL_SCHEMAS = {
     "DockingDenied": "dockingdenied",
 }
 
-_GENERAL_DISALLOWED = {
-    "ActiveFine", "CockpitBreach", "BoostUsed", "FuelLevel", "FuelUsed",
-    "JumpDist", "Latitude", "Longitude", "Wanted", "IsNewEntry",
-    "NewTraitsDiscovered", "Traits", "VoucherAmount",
-}
 _FACTION_PRIVATE = {"HappiestSystem", "HomeSystem", "MyReputation", "SquadronFaction"}
 _CODEX_PRIVATE = {"IsNewEntry", "NewTraitsDiscovered"}
 
@@ -237,11 +233,86 @@ _STRICT_NUMBER_FIELDS = {
     "OrbitalInclination", "Periapsis", "OrbitalPeriod", "AscendingNode", "MeanAnomaly",
 }
 
+# The journal/1 schema deliberately permits additional properties, so schema
+# validation cannot be the privacy boundary.  Project each supported event onto
+# an explicit field contract instead of forwarding every non-denylisted journal
+# key.  New Frontier fields therefore stay local until deliberately reviewed.
+_GENERAL_FIELDS = {
+    "Location": _COMMON_FIELDS | {
+        "Docked", "StarSystem", "SystemAddress", "StarPos", "Body", "BodyID",
+        "BodyType", "DistFromStarLS", "SystemAllegiance", "SystemEconomy",
+        "SystemSecondEconomy", "SystemGovernment", "SystemSecurity", "Population",
+        "SystemFaction", "Factions", "Conflicts", "Powers", "PowerplayState",
+    },
+    "FSDJump": _COMMON_FIELDS | {
+        "StarSystem", "SystemAddress", "StarPos", "Body", "BodyID", "BodyType",
+        "DistFromStarLS", "SystemAllegiance", "SystemEconomy", "SystemSecondEconomy",
+        "SystemGovernment", "SystemSecurity", "Population", "SystemFaction",
+        "Factions", "Conflicts", "Powers", "PowerplayState",
+    },
+    "CarrierJump": _COMMON_FIELDS | {
+        "Docked", "StarSystem", "SystemAddress", "StarPos", "Body", "BodyID",
+        "BodyType", "DistFromStarLS", "SystemAllegiance", "SystemEconomy",
+        "SystemSecondEconomy", "SystemGovernment", "SystemSecurity", "Population",
+        "SystemFaction", "Factions", "Conflicts", "Powers", "PowerplayState",
+        "StationName", "StationType", "MarketID",
+    },
+    "Docked": _COMMON_FIELDS | {
+        "StationName", "StationType", "StarSystem", "SystemAddress", "StarPos",
+        "MarketID", "StationFaction", "StationGovernment", "StationAllegiance",
+        "StationServices", "StationEconomy", "StationEconomies", "DistFromStarLS",
+        "LandingPads",
+    },
+    "Scan": _COMMON_FIELDS | {
+        "ScanType", "BodyName", "BodyID", "StarSystem", "SystemAddress", "StarPos",
+        "DistanceFromArrivalLS", "TidalLock", "TerraformState", "PlanetClass",
+        "Atmosphere", "AtmosphereType", "Volcanism", "MassEM", "Radius",
+        "SurfaceGravity", "SurfaceTemperature", "SurfacePressure", "Landable",
+        "Materials", "Composition", "SemiMajorAxis", "Eccentricity",
+        "OrbitalInclination", "Periapsis", "OrbitalPeriod", "RotationPeriod",
+        "AxialTilt", "Rings", "ReserveLevel", "Parents", "WasDiscovered",
+        "WasMapped", "StarType", "Subclass", "StellarMass", "AbsoluteMagnitude",
+        "Age_MY", "Luminosity", "AscendingNode", "MeanAnomaly",
+    },
+    "SAASignalsFound": _COMMON_FIELDS | {
+        "BodyName", "BodyID", "StarSystem", "SystemAddress", "StarPos", "Signals",
+    },
+}
+_GENERAL_NESTED_FIELDS = {
+    "SystemFaction": {"Name", "FactionState"},
+    "StationFaction": {"Name", "FactionState"},
+    "StationEconomies": {"Name", "Proportion"},
+    "LandingPads": {"Small", "Medium", "Large"},
+    "Materials": {"Name", "Percent"},
+    "Composition": {"Ice", "Rock", "Metal"},
+    "Rings": {"Name", "RingClass", "MassMT", "InnerRad", "OuterRad"},
+    "Signals": {"Type", "Count"},
+}
+_FACTION_FIELDS = {
+    "Name", "FactionState", "Government", "Influence", "Allegiance",
+    "PendingStates", "RecoveringStates", "ActiveStates",
+}
+_FACTION_STATE_FIELDS = {"State", "Trend"}
+_CONFLICT_FIELDS = {"WarType", "Status", "Faction1", "Faction2"}
+_CONFLICT_FACTION_FIELDS = {"Name", "Stake", "WonDays"}
+_PARENT_KEYS = {"Star", "Planet", "Null", "Ring", "Barycentre"}
+
 
 def enabled():
     from . import settings
 
     return bool(settings.get("eddn_upload", True))
+
+
+def extended_enabled():
+    """Whether the commander explicitly opted into non-market observations.
+
+    This consent is independent of the established anonymous market toggle;
+    neither class silently opts the commander into the other.
+    """
+    from . import settings
+
+    return bool(settings.get("eddn_extended_upload", False))
 
 
 def _symbol(raw):
@@ -263,8 +334,6 @@ def _strip_localised(value, *, general=False, in_faction=False):
     for key, item in value.items():
         if str(key).endswith("_Localised"):
             continue
-        if general and key in _GENERAL_DISALLOWED:
-            continue
         if in_faction and key in _FACTION_PRIVATE:
             continue
         clean[key] = _strip_localised(
@@ -273,6 +342,88 @@ def _strip_localised(value, *, general=False, in_faction=False):
             in_faction=(key == "Factions" or in_faction),
         )
     return clean
+
+
+def _project_dict(value, fields):
+    if not isinstance(value, dict):
+        return None
+    return {key: value[key] for key in fields if key in value}
+
+
+def _project_general_nested(message):
+    """Apply allowlists below the event root as well as at the root."""
+    for field, fields in _GENERAL_NESTED_FIELDS.items():
+        if field not in message:
+            continue
+        value = message[field]
+        if field in {"SystemFaction", "StationFaction", "LandingPads", "Composition"}:
+            clean = _project_dict(value, fields)
+            if clean is None:
+                return False
+            message[field] = clean
+            continue
+        if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+            return False
+        message[field] = [_project_dict(item, fields) for item in value]
+
+    if "Factions" in message:
+        factions = message["Factions"]
+        if not isinstance(factions, list) or not all(isinstance(item, dict) for item in factions):
+            return False
+        projected = []
+        for faction in factions:
+            clean = _project_dict(faction, _FACTION_FIELDS)
+            for state_field in ("PendingStates", "RecoveringStates", "ActiveStates"):
+                if state_field not in clean:
+                    continue
+                states = clean[state_field]
+                if not isinstance(states, list) or not all(isinstance(item, dict) for item in states):
+                    return False
+                clean[state_field] = [_project_dict(item, _FACTION_STATE_FIELDS) for item in states]
+            projected.append(clean)
+        message["Factions"] = projected
+
+    if "Conflicts" in message:
+        conflicts = message["Conflicts"]
+        if not isinstance(conflicts, list) or not all(isinstance(item, dict) for item in conflicts):
+            return False
+        projected = []
+        for conflict in conflicts:
+            clean = _project_dict(conflict, _CONFLICT_FIELDS)
+            for side in ("Faction1", "Faction2"):
+                if side in clean:
+                    clean[side] = _project_dict(clean[side], _CONFLICT_FACTION_FIELDS)
+                    if clean[side] is None:
+                        return False
+            projected.append(clean)
+        message["Conflicts"] = projected
+
+    if "Parents" in message:
+        parents = message["Parents"]
+        if not isinstance(parents, list) or not all(isinstance(item, dict) for item in parents):
+            return False
+        clean_parents = []
+        for parent in parents:
+            clean = {
+                key: value for key, value in parent.items()
+                if key in _PARENT_KEYS and _is_int(value)
+            }
+            if len(clean) != len(parent):
+                return False
+            clean_parents.append(clean)
+        message["Parents"] = clean_parents
+
+    if "Powers" in message and not (
+        isinstance(message["Powers"], list)
+        and all(isinstance(item, str) for item in message["Powers"])
+    ):
+        return False
+    if "StationServices" in message and not (
+        isinstance(message["StationServices"], list)
+        and all(isinstance(item, str) for item in message["StationServices"])
+    ):
+        return False
+    return True
 
 
 def _fresh(timestamp, max_age=MAX_AGE_S):
@@ -459,7 +610,12 @@ def _build_journal_message(schema_name, event, location, horizons, odyssey):
         context = None
 
     if general:
-        message = clean
+        fields = _GENERAL_FIELDS.get(clean.get("event"))
+        if fields is None:
+            return None
+        message = {key: value for key, value in clean.items() if key in fields}
+        if not _project_general_nested(message):
+            return None
         _add_flags(message, horizons, odyssey)
         if not _required_present("journal", message):
             return None
@@ -471,12 +627,6 @@ def _build_journal_message(schema_name, event, location, horizons, odyssey):
             or not _is_int(message.get("SystemAddress"))
         ):
             return None
-        for field in ("Factions", "Materials", "StationEconomies", "Signals"):
-            if field in message and not (
-                isinstance(message[field], list)
-                and all(isinstance(item, dict) for item in message[field])
-            ):
-                return None
         return message
 
     fields = _STRICT_FIELDS[schema_name]
@@ -639,6 +789,8 @@ class EddnUploader:
         with self._lock:
             return {
                 "enabled": enabled(),
+                "market_enabled": enabled(),
+                "extended_enabled": extended_enabled(),
                 "uploads": self.uploads,
                 "last_upload_at": self.last_upload_at,
                 "last_error": self.last_error,
@@ -698,7 +850,7 @@ class EddnUploader:
         on the game client. A pre-handler flush retains address-mismatched rows
         so the post-handler flush can try them against the newly trusted tuple.
         """
-        if not enabled():
+        if not extended_enabled():
             with self._signal_lock:
                 self._pending_signals = []
             return
@@ -764,7 +916,7 @@ class EddnUploader:
         """Publish a fresh journal observation supported by an official schema."""
         if not isinstance(event, dict):
             return
-        if not enabled():
+        if not extended_enabled():
             with self._signal_lock:
                 self._pending_signals = []
             return
@@ -807,7 +959,7 @@ class EddnUploader:
     ):
         """Publish a fresh game-written JSON snapshot using a strict builder."""
         schema_name = str(kind or "").lower()
-        if not enabled() or schema_name not in {
+        if not extended_enabled() or schema_name not in {
             "outfitting", "shipyard", "navroute", "fcmaterials",
         }:
             return

@@ -1,6 +1,7 @@
 """Diagnostics are bounded and support bundles redact sensitive paths."""
 
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -16,6 +17,12 @@ from elite import diagnostics, settings  # noqa: E402
 settings.update({"journal_dir": r"C:\Users\Secret\Saved Games\Frontier Developments"})
 path = diagnostics.configure()
 assert path.parent.is_dir()
+secret_pair = "one-time-pairing-token-should-never-escape"
+secret_bearer = "local-bearer-secret-should-never-escape"
+logging.getLogger("support-redaction-test").warning(
+    "GET /?pair=%s&view=panel\nAuthorization: Bearer %s",
+    secret_pair, secret_bearer,
+)
 
 bundle = diagnostics.create_bundle()
 assert bundle.is_file()
@@ -33,5 +40,8 @@ with zipfile.ZipFile(bundle) as zf:
     )
     assert _tmp.name.lower() not in bundle_text.lower()
     assert "C:\\Users\\Secret" not in bundle_text
+    assert secret_pair not in bundle_text and secret_bearer not in bundle_text
+    assert "pair=<redacted>" in bundle_text
 
+logging.shutdown()
 print("diagnostics OK: persistent log, bounded privacy-safe support bundle")

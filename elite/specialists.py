@@ -50,10 +50,10 @@ class SpecialistWorkflows:
         self.combat.update_inputs(loadout=loadout, materials=materials, cargo=cargo)
         return self.snapshot()
 
-    def snapshot(self) -> dict:
+    def snapshot(self, *, exobiology_options=None) -> dict:
         return {
             "mining": self.mining.snapshot(),
             "combat": self.combat.snapshot(),
             "carrier": self.carrier.snapshot(),
-            "exobiology": self.exobiology.snapshot(),
+            "exobiology": self.exobiology.snapshot(**(exobiology_options or {})),
         }

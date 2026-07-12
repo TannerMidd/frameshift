@@ -125,14 +125,17 @@ profile = marketdb.ensure_commander_profile("Test Commander")
 assert profile.startswith("cmdr-") and marketdb.active_commander_id() == profile
 marketdb.log_trade(1, "sell", "gold", "Gold", 3, 100, 300, 75, commander_id=profile)
 profiles = marketdb.connect_user()
-assert profiles.execute("SELECT COUNT(DISTINCT commander_id) FROM trade_log").fetchone()[0] == 1
-assert profiles.execute("SELECT COUNT(*) FROM trade_log WHERE commander_id = 'default'").fetchone()[0] == 0
+assert profiles.execute("SELECT COUNT(DISTINCT commander_id) FROM trade_log").fetchone()[0] == 2
+assert profiles.execute("SELECT COUNT(*) FROM trade_log WHERE commander_id = 'default'").fetchone()[0] == 1
+assert profiles.execute(
+    "SELECT COUNT(*) FROM trade_log WHERE commander_id = ?", (profile,)
+).fetchone()[0] == 1
 assert profiles.execute(
     "SELECT is_active FROM commander_profiles WHERE id = ?", (profile,)
 ).fetchone()[0] == 1
 profiles.close()
 
-print("profiles OK: legacy rows adopted once + separate compound-key commander history")
+print("profiles OK: ambiguous v2 history quarantined + compound-key commander history")
 
 
 # ---------- new dump promotion replays EDDN freshness, preserves user DB ----------

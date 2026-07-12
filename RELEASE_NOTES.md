@@ -40,7 +40,9 @@ migrate automatically.
   overwriting work. There is no hosted board or sign-in.
 - Local permissioned extension packs can turn matching journal events into
   alerts or objective suggestions. Declarative packs execute no code; advanced
-  process adapters require an explicit local `APPROVED` marker.
+  process adapters require an explicit approval stored by Frameshift outside
+  the pack and bound to the reviewed pack's full content hash. Any changed
+  pack file automatically returns the adapter to pending approval.
 
 ### ▦ Specialist consoles
 
@@ -102,27 +104,34 @@ migrate automatically.
 
 ### 🌐 Anonymous community contribution
 
-- Frameshift still requires no third-party account. In addition to commodity
-  markets, it can contribute privacy-stripped outfitting, shipyard, navigation,
-  exploration, Codex and biological-signal observations through EDDN's public schemas.
+- Frameshift still requires no third-party account. Anonymous commodity-market
+  contribution keeps its existing default; a separate, default-off informed
+  opt-in can contribute outfitting, shipyard, navigation, exploration, Codex
+  and biological-signal observations through EDDN's public schemas.
 - Reports include game version/build and location context where the schema
-  requires it. Private/local journal fields are removed, Legacy reports remain
-  distinguishable, and uploads can still be disabled in Settings.
+  requires it. Event-specific root and nested allowlists keep unknown and
+  commander-local fields out, Legacy reports remain distinguishable, and
+  either contribution class can be disabled in Settings.
 
 ### 🩺 Diagnostics, releases and recovery
 
 - Rotating local logs and a one-click **Support Bundle** make background issues
   diagnosable. The bounded ZIP includes health, sanitized settings and logs —
-  never journals, commander names, pairing secrets or either database.
+  never journals, commander names, pairing secrets or either database. Pairing
+  query values, authorization headers and cookies are scrubbed from copied logs.
 - Settings writes are atomic and recover a corrupt file to a backup instead of
   silently discarding it.
 - Game presence uses native Windows process enumeration, is checked before
   journal/database bootstrap, and never treats a historical `Shutdown` replay
   as proof that the currently running game is offline.
-- Packaged updates now require a matching SHA-256 sidecar from a trusted HTTPS
-  GitHub release URL, enforce download bounds and create a rollback executable
-  before replacement. A missing or malformed checksum stops the update.
-- Dependencies are pinned. Continuous integration compiles and tests the app
+- Packaged updates now require a matching same-release SHA-256 sidecar over
+  validated HTTPS GitHub redirect targets, enforce download bounds and create
+  a rollback executable before replacement. The digest detects corruption and
+  truncation but is not an independent publisher signature. Rollback is kept
+  through a sustained healthy replacement launch and a later successful
+  startup; a missing or malformed checksum stops the update.
+- Dependencies and third-party workflow actions are pinned. Continuous
+  integration compiles and tests the app
   on Windows and Linux, checks browser JavaScript, and the Windows release job
   smoke-tests the packaged executable before publishing both product names and
   their checksums.

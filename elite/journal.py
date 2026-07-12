@@ -190,9 +190,13 @@ class JournalWatcher:
         self._eddn_journal_body_id = None
         self._last_background_error = None
         self._last_background_error_at = 0.0
+        self._reconstruction_pending = False
         self._profile_handoff_pending = False
         self._handoff_commander_id = None
         self._handoff_state = None
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._thread_lock = threading.Lock()
 
     # ---------- event handling ----------
 
@@ -1311,16 +1315,29 @@ class JournalWatcher:
             mats[cat].pop(sym, None)
         self.state.update(materials=mats)
 
-    def _pinned_craftable(self):
+    def _engineering_wishlist(self):
+        """Return the established commander's normalized engineering pins."""
+        if not self._commander_id:
+            return []
+        from . import blueprints, wishlist
+
+        try:
+            saved, _adopted = wishlist.load(self._commander_id)
+        except ValueError:
+            return []
+        normalized, _changed = blueprints.normalize_wishlist(saved)
+        return normalized
+
+    def _pinned_craftable(self, pins=None):
         """Names of pinned blueprints whose full climb is covered right now."""
-        from . import blueprints, settings
+        from . import blueprints
 
         inventory = {}
         for cat in self.state.materials.values():
             for sym, m in cat.items():
                 inventory[sym] = m.get("count", 0)
         out = set()
-        for p in settings.get("pinned_blueprints", []):
+        for p in pins if pins is not None else self._engineering_wishlist():
             try:
                 if blueprints.plan(p["name"], p.get("grade", 5), inventory)["craftable"]:
                     out.add(p["name"])
@@ -1329,17 +1346,16 @@ class JournalWatcher:
         return out
 
     def _on_materialcollected(self, e):
-        before = self._pinned_craftable() if self._live else set()
+        pins = self._engineering_wishlist() if self._live else []
+        before = self._pinned_craftable(pins) if pins else set()
         self._adjust_material(e.get("Category"), e, +1)
         if not self._live:
             return
         # A pickup that completes a pinned blueprint's shopping list is worth
         # announcing — that's the moment you can stop farming.
-        newly_ready = self._pinned_craftable() - before
+        newly_ready = self._pinned_craftable(pins) - before
         if newly_ready:
-            from . import settings
-
-            grades = {p["name"]: p.get("grade", 5) for p in settings.get("pinned_blueprints", [])}
+            grades = {p["name"]: p.get("grade", 5) for p in pins}
             for name in newly_ready:
                 grade = grades.get(name, 5)
                 self.state.push_alert(
@@ -1818,6 +1834,8 @@ class JournalWatcher:
                 break
 
         for path in selected:
+            if self._stop_event.is_set():
+                break
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
                 last_line = self._process_lines(text, source_file=path.name)
@@ -1877,7 +1895,10 @@ class JournalWatcher:
 
     # Bump when the set of events swept below changes, to force a one-time
     # re-import of already-processed journals (all logging is INSERT OR IGNORE).
-    HISTORY_VERSION = "4"
+    HISTORY_VERSION = "5"
+    DERIVED_HISTORY_VERSION = "2"
+    _DERIVED_REPLAY_PRESERVING = DERIVED_HISTORY_VERSION + ":preserving"
+    _DERIVED_REPLAY_HISTORY_READY = DERIVED_HISTORY_VERSION + ":history-ready"
 
     # etype -> handler, for both the history sweep and the marker prefilter.
     _HISTORY_EVENTS = (
@@ -1946,7 +1967,23 @@ class JournalWatcher:
         essential for players with multiple accounts sharing one journal folder.
         """
         if not self.journal_dir.is_dir():
-            return
+            # If a repair was already staged, a temporarily unavailable folder
+            # cannot be treated as a successful empty sweep: doing so would
+            # expose cleared state and discard the bootstrap ordering barrier.
+            conn = marketdb.connect_user()
+            try:
+                marker = conn.execute(
+                    "SELECT value FROM user_meta WHERE key='journal_derived_version'"
+                ).fetchone()
+            finally:
+                conn.close()
+            if marker and marker[0] in {
+                self._DERIVED_REPLAY_PRESERVING,
+                self._DERIVED_REPLAY_HISTORY_READY,
+            }:
+                return False
+            return True
+        replay_phase = self._prepare_derived_history_replay()
         conn = marketdb.connect()
         try:
             if marketdb.get_meta(conn, "history_version") != self.HISTORY_VERSION:
@@ -1960,7 +1997,11 @@ class JournalWatcher:
         finally:
             conn.close()
         files = journal_files(self.journal_dir)
+        sweep_complete = True
         for path in files[:-1]:  # the newest file is still being written; tail covers it
+            if self._stop_event.is_set():
+                sweep_complete = False
+                break
             try:
                 parsed = []
                 commander_name = None
@@ -1981,7 +2022,11 @@ class JournalWatcher:
                     elif event["event"] == "LoadGame" and event.get("Commander"):
                         commander_name = event["Commander"]
             except OSError:
-                continue
+                # An unreadable old file is a hard ordering barrier for every
+                # state-machine replay, not just the one-time repair. Retrying
+                # is safe because reducers and per-file markers are durable.
+                sweep_complete = False
+                break
             if not parsed:
                 continue
             # A damaged/header-only file has no trustworthy owner.  Never infer
@@ -2059,7 +2104,11 @@ class JournalWatcher:
                 # marker so a transient disk lock or a newly-fixed reducer is
                 # retried on the next sweep rather than creating a permanent
                 # hole in the commander's history.
-                continue
+                # Derived reducers are state machines, so a failed older file
+                # is a chronological barrier. Processing newer files and then
+                # retrying this one would corrupt the present state again.
+                sweep_complete = False
+                break
             conn = marketdb.connect()
             try:
                 conn.execute(
@@ -2070,6 +2119,433 @@ class JournalWatcher:
             finally:
                 conn.close()
 
+        if not sweep_complete:
+            return False
+        if replay_phase:
+            conn = marketdb.connect_user()
+            try:
+                conn.execute(
+                    "INSERT OR REPLACE INTO user_meta(key,value) VALUES(?,?)",
+                    ("journal_derived_version", self._DERIVED_REPLAY_HISTORY_READY),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        return True
+
+    @staticmethod
+    def _preservable_specialist_fragment(conn, commander_id, workflow, raw_state):
+        """Extract only inputs the journal cannot authoritatively reconstruct."""
+        try:
+            state = json.loads(raw_state)
+        except (TypeError, json.JSONDecodeError):
+            return None
+        if not isinstance(state, dict):
+            return None
+        fragment = {"fallback_state": state}
+
+        if workflow == "carrier_ops":
+            plan = state.get("plan") if isinstance(state.get("plan"), dict) else {}
+            upkeep_source = str(plan.get("upkeep_source") or "").casefold()
+            explicit_plan = bool(
+                plan.get("weekly_upkeep_cr") is not None
+                or plan.get("route")
+                or plan.get("tritium_per_jump_t") is not None
+                or plan.get("tritium_reserve_t") not in (None, 0, 0.0)
+                or plan.get("reserve_target_weeks") not in (None, 8)
+                or (upkeep_source and "not configured" not in upkeep_source)
+            )
+            if explicit_plan:
+                keys = (
+                    "weekly_upkeep_cr", "upkeep_source", "reserve_target_weeks",
+                    "tritium_per_jump_t", "tritium_reserve_t", "route",
+                )
+                fragment["plan"] = {key: plan.get(key) for key in keys}
+            inventory_source = str(state.get("inventory_source") or "").casefold()
+            if inventory_source and "journal" not in inventory_source:
+                fragment["inventory"] = state.get("inventory")
+                fragment["inventory_source"] = state.get("inventory_source")
+            return fragment
+
+        if workflow == "exobiology_map":
+            preserved_surveys = []
+            surveys = state.get("surveys") if isinstance(state.get("surveys"), dict) else {}
+            for key, survey in surveys.items():
+                if not isinstance(survey, dict):
+                    continue
+                preserved_surveys.append({**survey, "key": survey.get("key") or key})
+            fragment["surveys"] = preserved_surveys
+            return fragment
+
+        if workflow in {"mining", "combat_ops"}:
+            session = state.get("session")
+            if not isinstance(session, dict) or not session.get("active"):
+                return fragment
+            started_ts = session.get("started_ts")
+            # Automatic sessions start on a journal event and therefore have
+            # an event marker at exactly the same timestamp. API/button starts
+            # deliberately do not create specialist_events rows.
+            journal_start = conn.execute(
+                "SELECT 1 FROM specialist_events"
+                " WHERE commander_id=? AND workflow=? AND event_ts=? LIMIT 1",
+                (commander_id, workflow, started_ts),
+            ).fetchone()
+            if not journal_start:
+                fragment["active_session"] = session
+            return fragment
+        return fragment
+
+    @staticmethod
+    def _specialist_default_state(workflow):
+        if workflow == "carrier_ops":
+            from .carrierops import _default_state
+        elif workflow == "exobiology_map":
+            from .exobiology import _default_state
+        elif workflow == "mining":
+            from .mining import _default_state
+        elif workflow == "combat_ops":
+            from .combatops import _default_state
+        else:
+            return {}
+        return _default_state()
+
+    @staticmethod
+    def _merge_preserved_specialist_state(workflow, rebuilt, fragment):
+        state = rebuilt if isinstance(rebuilt, dict) else {}
+        if workflow == "carrier_ops":
+            if isinstance(fragment.get("plan"), dict):
+                state.setdefault("plan", {}).update(fragment["plan"])
+            if "inventory" in fragment:
+                state["inventory"] = fragment["inventory"]
+                state["inventory_source"] = fragment.get("inventory_source")
+        elif workflow == "exobiology_map":
+            surveys = state.setdefault("surveys", {})
+            if not isinstance(surveys, dict):
+                surveys = state["surveys"] = {}
+            for saved in fragment.get("surveys") or []:
+                key = saved.get("key")
+                if not key:
+                    continue
+                survey = surveys.get(key)
+                if not isinstance(survey, dict):
+                    # No surviving journal recreated this body, so the old
+                    # complete survey is the only local record of it.
+                    survey = dict(saved)
+                    surveys[key] = survey
+                else:
+                    # Matching rebuilt surveys stay authoritative. Fill only
+                    # facts that the surviving journal subset did not supply.
+                    for field in (
+                        "system", "system_address", "body", "body_id", "radius_m",
+                        "signal_count", "genuses", "updated_ts",
+                    ):
+                        if survey.get(field) in (None, [], {}) and saved.get(field) not in (
+                            None, [], {},
+                        ):
+                            survey[field] = saved[field]
+                    completed = survey.setdefault("completed", {})
+                    if not isinstance(completed, dict):
+                        completed = survey["completed"] = {}
+                    for organism, details in (saved.get("completed") or {}).items():
+                        completed.setdefault(organism, details)
+                pins = survey.setdefault("pins", [])
+                if not isinstance(pins, list):
+                    pins = survey["pins"] = []
+                def signature(pin):
+                    if not isinstance(pin, dict):
+                        return None
+                    return (
+                        pin.get("source"), pin.get("timestamp"), pin.get("lat"),
+                        pin.get("lon"), pin.get("label"),
+                    )
+
+                known = {signature(pin) for pin in pins if signature(pin) is not None}
+                for pin in saved.get("pins") or []:
+                    marker = signature(pin)
+                    if marker is not None and marker in known:
+                        continue
+                    pins.append(pin)
+                    if marker is not None:
+                        known.add(marker)
+                if state.get("system") is None:
+                    state["system"] = saved.get("system")
+                if state.get("system_address") is None:
+                    state["system_address"] = saved.get("system_address")
+        elif workflow in {"mining", "combat_ops"}:
+            manual = fragment.get("active_session")
+            if isinstance(manual, dict):
+                rebuilt_session = state.get("session")
+
+                def latest(item):
+                    if not isinstance(item, dict):
+                        return -1
+                    values = (
+                        item.get("ended_ts"), item.get("last_event_ts"),
+                        item.get("started_ts"),
+                    )
+                    numeric = []
+                    for value in values:
+                        try:
+                            numeric.append(int(value))
+                        except (TypeError, ValueError):
+                            pass
+                    return max(numeric, default=-1)
+
+                # The rebuilt projection wins at equal/newer timestamps. A
+                # later manual start is a real current session after the old
+                # journal timeline and must remain active.
+                if latest(manual) > latest(rebuilt_session):
+                    state["session"] = manual
+        return state
+
+    def _prepare_derived_history_replay(self):
+        """Stage user-authored data, then clear the flawed v4 projections.
+
+        The staging tables and phase marker share the clearing transaction.
+        A crash therefore either leaves the original data untouched or leaves
+        a durable preservation set that a later launch can restore after the
+        chronological sweep and live bootstrap have both completed.
+        """
+        conn = marketdb.connect_user()
+        try:
+            current = conn.execute(
+                "SELECT value FROM user_meta WHERE key='journal_derived_version'"
+            ).fetchone()
+            phase = current[0] if current else None
+            if phase == self.DERIVED_HISTORY_VERSION:
+                return None
+            if phase in {
+                self._DERIVED_REPLAY_PRESERVING,
+                self._DERIVED_REPLAY_HISTORY_READY,
+            }:
+                return phase
+            previous_history = conn.execute(
+                "SELECT value FROM user_meta WHERE key='history_version'"
+            ).fetchone()
+            if not previous_history or previous_history[0] != "4":
+                # v2.0 did not have these projections, while a fresh v2.1 user
+                # may have intentionally created a pre-game specialist session.
+                # Only history v4 identifies a database exposed to the flawed
+                # recent-first replay; never clear data merely for lacking a
+                # marker introduced by this release.
+                conn.execute(
+                    "INSERT OR REPLACE INTO user_meta(key,value) VALUES(?,?)",
+                    ("journal_derived_version", self.DERIVED_HISTORY_VERSION),
+                )
+                conn.commit()
+                return None
+            tables = {
+                row[0] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            populated = False
+            for table in (
+                "specialist_state", "specialist_events", "specialist_history",
+                "timing_pending",
+            ):
+                if table in tables and conn.execute(
+                    f"SELECT 1 FROM {marketdb.commanderdb.quote_identifier(table)} LIMIT 1"
+                ).fetchone():
+                    populated = True
+                    break
+            if not populated and "timing_observations" in tables:
+                populated = bool(conn.execute(
+                    "SELECT 1 FROM timing_observations WHERE source='journal' LIMIT 1"
+                ).fetchone())
+        finally:
+            conn.close()
+
+        if populated:
+            marketdb.backup_commander_data(reason="chronological-derived-replay")
+
+        conn = marketdb.connect_user()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS journal_replay_preserved_state("
+                " commander_id TEXT NOT NULL, workflow TEXT NOT NULL, fragment_json TEXT NOT NULL,"
+                " PRIMARY KEY(commander_id,workflow)) WITHOUT ROWID"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS journal_replay_preserved_history("
+                " commander_id TEXT NOT NULL, workflow TEXT NOT NULL, session_key TEXT NOT NULL,"
+                " started_ts INTEGER, ended_ts INTEGER, summary_json TEXT NOT NULL,"
+                " created_at TEXT NOT NULL, PRIMARY KEY(commander_id,workflow,session_key))"
+                " WITHOUT ROWID"
+            )
+            conn.execute("DELETE FROM journal_replay_preserved_state")
+            conn.execute("DELETE FROM journal_replay_preserved_history")
+            tables = {
+                row[0] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            if "specialist_state" in tables:
+                rows = conn.execute(
+                    "SELECT commander_id,workflow,state_json FROM specialist_state"
+                ).fetchall()
+                for commander_id, workflow, raw_state in rows:
+                    fragment = self._preservable_specialist_fragment(
+                        conn, commander_id, workflow, raw_state)
+                    if fragment:
+                        conn.execute(
+                            "INSERT INTO journal_replay_preserved_state"
+                            "(commander_id,workflow,fragment_json) VALUES(?,?,?)",
+                            (
+                                commander_id, workflow,
+                                json.dumps(fragment, ensure_ascii=False, sort_keys=True,
+                                           separators=(",", ":")),
+                            ),
+                        )
+            if "specialist_history" in tables:
+                conn.execute(
+                    "INSERT INTO journal_replay_preserved_history("
+                    "commander_id,workflow,session_key,started_ts,ended_ts,summary_json,created_at)"
+                    " SELECT commander_id,workflow,session_key,started_ts,ended_ts,summary_json,created_at"
+                    " FROM specialist_history"
+                )
+            for table in ("specialist_state", "specialist_events", "specialist_history"):
+                if table in tables:
+                    conn.execute(
+                        f"DELETE FROM {marketdb.commanderdb.quote_identifier(table)}"
+                    )
+            if "timing_pending" in tables:
+                conn.execute("DELETE FROM timing_pending")
+            # Completed timing observations are immutable facts with a unique
+            # transition key. Retaining them is safe under replay de-duplication
+            # and preserves samples whose source journal has since been pruned.
+            conn.execute(
+                "INSERT OR REPLACE INTO user_meta(key,value) VALUES(?,?)",
+                ("journal_derived_version", self._DERIVED_REPLAY_PRESERVING),
+            )
+            conn.commit()
+            return self._DERIVED_REPLAY_PRESERVING
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def _derived_history_replay_pending(self):
+        conn = marketdb.connect_user()
+        try:
+            marker = conn.execute(
+                "SELECT value FROM user_meta WHERE key='journal_derived_version'"
+            ).fetchone()
+            return bool(marker and marker[0] in {
+                self._DERIVED_REPLAY_PRESERVING,
+                self._DERIVED_REPLAY_HISTORY_READY,
+            })
+        finally:
+            conn.close()
+
+    def _finalize_derived_history_replay(self):
+        """Merge staged non-journal data after historical and live replay."""
+        conn = marketdb.connect_user()
+        try:
+            phase = conn.execute(
+                "SELECT value FROM user_meta WHERE key='journal_derived_version'"
+            ).fetchone()
+            if not phase or phase[0] == self.DERIVED_HISTORY_VERSION:
+                return True
+            if phase[0] != self._DERIVED_REPLAY_HISTORY_READY:
+                return False
+            if not self.journal_dir.is_dir():
+                return False
+            conn.execute("BEGIN IMMEDIATE")
+            adopted = conn.execute(
+                "SELECT value FROM user_meta WHERE key='default_profile_adopted_by'"
+            ).fetchone()
+            adopted_id = adopted[0] if adopted and adopted[0] != "default" else None
+
+            def restored_commander(source_id):
+                return adopted_id if source_id == "default" and adopted_id else source_id
+
+            rows = conn.execute(
+                "SELECT commander_id,workflow,fragment_json"
+                " FROM journal_replay_preserved_state"
+                " ORDER BY CASE WHEN commander_id='default' THEN 0 ELSE 1 END"
+            ).fetchall()
+            for source_commander_id, workflow, raw_fragment in rows:
+                commander_id = restored_commander(source_commander_id)
+                try:
+                    fragment = json.loads(raw_fragment)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                current = conn.execute(
+                    "SELECT state_json FROM specialist_state"
+                    " WHERE commander_id=? AND workflow=?",
+                    (commander_id, workflow),
+                ).fetchone()
+                try:
+                    rebuilt = json.loads(current[0]) if current else None
+                except (TypeError, json.JSONDecodeError):
+                    rebuilt = None
+                if not isinstance(rebuilt, dict):
+                    fallback = fragment.get("fallback_state")
+                    rebuilt = (
+                        fallback if not current and isinstance(fallback, dict)
+                        else self._specialist_default_state(workflow)
+                    )
+                merged = self._merge_preserved_specialist_state(
+                    workflow, rebuilt, fragment)
+                conn.execute(
+                    "INSERT INTO specialist_state(commander_id,workflow,state_json,updated_at)"
+                    " VALUES(?,?,?,?) ON CONFLICT(commander_id,workflow) DO UPDATE SET"
+                    " state_json=excluded.state_json,updated_at=excluded.updated_at",
+                    (
+                        commander_id, workflow,
+                        json.dumps(merged, ensure_ascii=False, sort_keys=True,
+                                   separators=(",", ":")),
+                        marketdb.utc_now_iso(),
+                    ),
+                )
+
+            history = conn.execute(
+                "SELECT commander_id,workflow,session_key,started_ts,ended_ts,"
+                "summary_json,created_at FROM journal_replay_preserved_history"
+                " ORDER BY CASE WHEN commander_id='default' THEN 1 ELSE 0 END"
+            ).fetchall()
+            for source_commander_id, workflow, key, started, ended, raw_summary, created in history:
+                commander_id = restored_commander(source_commander_id)
+                duplicate = conn.execute(
+                    "SELECT 1 FROM specialist_history WHERE commander_id=? AND workflow=?"
+                    " AND started_ts IS ? AND ended_ts IS ? LIMIT 1",
+                    (commander_id, workflow, started, ended),
+                ).fetchone()
+                if duplicate:
+                    continue
+                collision = conn.execute(
+                    "SELECT 1 FROM specialist_history"
+                    " WHERE commander_id=? AND workflow=? AND session_key=?",
+                    (commander_id, workflow, key),
+                ).fetchone()
+                if collision:
+                    # Session keys are logical identities. If replay rebuilt
+                    # that session, its chronological version is authoritative
+                    # even when the flawed v4 projection recorded bad times.
+                    continue
+                conn.execute(
+                    "INSERT INTO specialist_history("
+                    "commander_id,workflow,session_key,started_ts,ended_ts,summary_json,created_at)"
+                    " VALUES(?,?,?,?,?,?,?)",
+                    (commander_id, workflow, key, started, ended, raw_summary, created),
+                )
+            conn.execute("DELETE FROM journal_replay_preserved_state")
+            conn.execute("DELETE FROM journal_replay_preserved_history")
+            conn.execute(
+                "INSERT OR REPLACE INTO user_meta(key,value) VALUES(?,?)",
+                ("journal_derived_version", self.DERIVED_HISTORY_VERSION),
+            )
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     def _ensure_journal_dir(self):
         """Recover from a missing or changed journal folder without a restart:
         re-resolve (the in-app setting may have changed, or the game's first
@@ -2079,7 +2555,7 @@ class JournalWatcher:
         desired = find_journal_dir()
         changed = desired != self.journal_dir
         appeared = not self.state.journal_dir_found and self.journal_dir.is_dir()
-        if not changed and not appeared:
+        if not changed and not appeared and not self._reconstruction_pending:
             return
         if changed:
             if not desired.is_dir():
@@ -2088,20 +2564,35 @@ class JournalWatcher:
                 return
             self.journal_dir = desired
         self._live = False
+        self._reconstruction_pending = True
         self._status_mtimes = {}
+        reconstruction_ready = False
         try:
-            self.bootstrap()
-        except Exception as exc:
-            self._log_background_failure("journal bootstrap after directory change", exc)
-        else:
+            history_ready = False
             try:
-                self.import_trade_history()
+                history_ready = self.import_trade_history()
             except Exception as exc:
-                self._log_background_failure("journal history import after directory change", exc)
+                self._log_background_failure(
+                    "journal history import after directory change", exc
+                )
+            if not history_ready:
+                raise RuntimeError("chronological journal replay is not complete")
+            if history_ready and not self._stop_event.is_set():
+                try:
+                    self.bootstrap()
+                    if not self._finalize_derived_history_replay():
+                        raise RuntimeError("journal replay is awaiting its historical sweep")
+                    reconstruction_ready = True
+                except Exception as exc:
+                    self._log_background_failure(
+                        "journal bootstrap after directory change", exc
+                    )
+                    raise
         finally:
-            # A transient sidecar/backfill failure must not permanently leave
-            # live tailing and EDDN publication disabled.
-            self._live = True
+            # Do not tail/publish a new folder on top of a partial repair. The
+            # outer poll loop retries _ensure_journal_dir on its next pass.
+            self._live = reconstruction_ready
+            self._reconstruction_pending = not reconstruction_ready
         self._fetch_community_bio(self.state.system_address, self.state.system)
 
     def _probe_game(self):
@@ -2136,26 +2627,52 @@ class JournalWatcher:
             self._probe_game()
         except Exception as exc:
             self._log_background_failure("initial game process probe", exc)
-        try:
-            self.bootstrap()
-        except Exception as exc:
-            self._log_background_failure("journal bootstrap", exc)
-        # Probe again after bootstrap in case the game started while journal
-        # context was being rebuilt, and before the slower lifetime sweep.
+        # Replay every completed file before rebuilding the live snapshot.
+        # Otherwise a session start older than BOOTSTRAP_MAX_FILES can arrive
+        # after its recent closing event and leave the durable reducer active.
+        while not self._stop_event.is_set():
+            try:
+                if self.import_trade_history():
+                    break
+            except Exception as exc:
+                self._log_background_failure("journal history import", exc)
+            # A transient reducer/database error is an ordering barrier. Retry
+            # it before bootstrap instead of mixing recent events into a
+            # partially reconstructed older state.
+            if self._stop_event.wait(POLL_SECONDS):
+                return
+        if self._stop_event.is_set():
+            return
+        while not self._stop_event.is_set():
+            try:
+                self.bootstrap()
+                if not self._finalize_derived_history_replay():
+                    raise RuntimeError("journal replay is awaiting its historical sweep")
+                break
+            except Exception as exc:
+                self._log_background_failure("journal bootstrap", exc)
+                if not self._derived_history_replay_pending():
+                    break
+            # Preservation stays staged until a complete bootstrap and final
+            # merge commit. Retrying is safe because journal event IDs dedupe.
+            if self._stop_event.wait(POLL_SECONDS):
+                return
+        if self._stop_event.is_set():
+            return
+        # Probe again after reconstruction in case the game started while the
+        # local history was being rebuilt.
         try:
             self._probe_game()
         except Exception as exc:
             self._log_background_failure("game process probe", exc)
-        try:
-            self.import_trade_history()
-        except Exception as exc:
-            self._log_background_failure("journal history import", exc)
+        if self._stop_event.is_set():
+            return
         self._live = True
         # Bootstrap set the current system without a live event, so fetch its
         # community bio data now.
         self._fetch_community_bio(self.state.system_address, self.state.system)
         last_probe = 0.0
-        while True:
+        while not self._stop_event.is_set():
             try:
                 self._ensure_journal_dir()
                 self._poll_journal()
@@ -2165,9 +2682,28 @@ class JournalWatcher:
                     self._probe_game()
             except Exception as exc:
                 self._log_background_failure("journal watcher poll", exc)
-            time.sleep(POLL_SECONDS)
+            self._stop_event.wait(POLL_SECONDS)
 
     def start(self):
-        thread = threading.Thread(target=self.run_forever, name="journal-watcher", daemon=True)
-        thread.start()
-        return thread
+        with self._thread_lock:
+            if self._thread and self._thread.is_alive():
+                return self._thread
+            self._stop_event.clear()
+            self._thread = threading.Thread(
+                target=self.run_forever, name="journal-watcher", daemon=True,
+            )
+            self._thread.start()
+            return self._thread
+
+    def stop(self, timeout=5):
+        """Request shutdown, join the worker, and detach extension callbacks."""
+        self._stop_event.set()
+        with self._thread_lock:
+            thread = self._thread
+        if thread and thread is not threading.current_thread():
+            thread.join(max(0, float(timeout)))
+        stopped = not thread or not thread.is_alive()
+        if stopped and self._extension_unsubscribe:
+            self._extension_unsubscribe()
+            self._extension_unsubscribe = None
+        return stopped

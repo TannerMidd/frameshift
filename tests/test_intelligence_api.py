@@ -32,16 +32,25 @@ EventLedger(commander_id).record({
 app = create_app(state)
 app.testing = True
 client = app.test_client()
+profile_headers = {"X-Frameshift-Commander": commander_id}
 
-created = client.post("/api/objectives", json={
+
+def post(path, **kwargs):
+    return client.post(path, headers=profile_headers, **kwargs)
+
+
+def patch(path, **kwargs):
+    return client.patch(path, headers=profile_headers, **kwargs)
+
+created = post("/api/objectives", json={
     "title": "Visit the engineer", "category": "engineering", "system": "Deciat",
 })
 assert created.status_code == 201, created.get_json()
 objective = created.get_json()["objective"]
 assert client.get("/api/objectives").get_json()["objectives"][0]["id"] == objective["id"]
-assert client.patch(f"/api/objectives/{objective['id']}", json={"status": "active"}).status_code == 200
+assert patch(f"/api/objectives/{objective['id']}", json={"status": "active"}).status_code == 200
 
-plan = client.post("/api/objectives/plan", json={"minutes": 60}).get_json()
+plan = post("/api/objectives/plan", json={"minutes": 60}).get_json()
 assert plan["budget_minutes"] == 60 and plan["graph"]["nodes"], plan
 assert client.get("/api/timings").get_json()["commander_id"] == commander_id
 
@@ -50,12 +59,12 @@ assert summary["commander_id"] == commander_id and summary["events"] == 1, summa
 events = client.get("/api/history/events?types=FSDJump&limit=5").get_json()["events"]
 assert len(events) == 1 and events[0]["event"]["StarSystem"] == "Sol", events
 
-board_response = client.post("/api/operations", json={
+board_response = post("/api/operations", json={
     "action": "create_board", "title": "Local wing night",
 })
 assert board_response.status_code == 201, board_response.get_json()
 board = board_response.get_json()["record"]
-added = client.post("/api/operations", json={
+added = post("/api/operations", json={
     "action": "add_objective", "board_id": board["id"], "title": "Deliver supplies",
 })
 assert added.status_code == 201, added.get_json()
@@ -63,13 +72,13 @@ snapshot = client.get("/api/operations?board_id=" + board["id"]).get_json()
 assert snapshot["board"]["id"] == board["id"] and len(snapshot["objectives"]) == 1
 exported = client.get("/api/operations/export?board_id=" + board["id"])
 assert exported.status_code == 200 and json.loads(exported.data)["format"] == "frameshift.operations"
-assert client.post("/api/operations/import", json={"document": json.loads(exported.data)}).status_code == 200
+assert post("/api/operations/import", json={"document": json.loads(exported.data)}).status_code == 200
 large_document = json.loads(exported.data)
 large_document["local_note"] = "x" * 70_000
-assert client.post("/api/operations/import", json=large_document).status_code == 200
-assert client.post("/api/settings", json={"journal_dir": "x" * 70_000}).status_code == 413
+assert post("/api/operations/import", json=large_document).status_code == 200
+assert post("/api/settings", json={"journal_dir": "x" * 70_000}).status_code == 413
 
-recovery = client.post("/api/cargo-recovery", json={})
+recovery = post("/api/cargo-recovery", json={})
 assert recovery.status_code == 400 and "empty" in recovery.get_json()["error"].lower()
 
 security = client.get("/api/security/status").get_json()
@@ -80,10 +89,10 @@ assert client.get("/api/diagnostics/health").status_code == 200
 
 specialists = client.get("/api/specialists")
 assert specialists.status_code == 200 and "mining" in specialists.get_json()
-started = client.post("/api/specialists/mining/start", json={}).get_json()
+started = post("/api/specialists/mining/start", json={}).get_json()
 assert started["mining"]["active"] is True
-assert client.post("/api/specialists/mining/end", json={}).get_json()["mining"]["active"] is False
-configured = client.post("/api/specialists/carrier/config", json={
+assert post("/api/specialists/mining/end", json={}).get_json()["mining"]["active"] is False
+configured = post("/api/specialists/carrier/config", json={
     "weekly_upkeep_cr": 10_000_000, "target_weeks": 8,
 })
 assert configured.status_code == 200
@@ -91,12 +100,12 @@ state.update(pos={
     "lat": 1.0, "lon": 2.0, "body": "Sol A 1", "radius_m": 1_000_000,
     "heading": 90,
 })
-pin = client.post("/api/specialists/exobiology/pins", json={"label": "Ship"})
+pin = post("/api/specialists/exobiology/pins", json={"label": "Ship"})
 assert pin.status_code == 201, pin.get_json()
 geo = client.get("/api/specialists/exobiology/geojson").get_json()
 assert geo["features"] and geo["features"][0]["properties"]["label"] == "Ship"
 
-bundle = client.post("/api/diagnostics/bundle")
+bundle = post("/api/diagnostics/bundle")
 assert bundle.status_code == 200 and bundle.mimetype == "application/zip"
 bundle.close()
 

@@ -11,6 +11,7 @@ sys.path.insert(0, str(TEST_DIR.parent))
 sys.path.insert(0, str(TEST_DIR))
 _tmp = tempfile.TemporaryDirectory()
 os.environ["ET_DATA_DIR"] = _tmp.name
+os.environ["ET_EDDN_EXTENDED_UPLOAD"] = "1"
 
 from _eddn_schema_validator import validate  # noqa: E402
 from elite import eddn_upload  # noqa: E402

@@ -111,7 +111,27 @@ def rank_candidates(candidates) -> list[str]:
             candidate.metric,
         )
         current = best.get(value)
-        if current is None or _candidate_score(normalized) < _candidate_score(current):
+        # Socket discovery has no adapter metadata.  When it rediscovers an
+        # address already classified by the Windows IP Helper API, do not let
+        # that anonymous duplicate erase a known VPN/virtual classification.
+        # Otherwise a default-route VPN can launder itself back into the
+        # candidate list as an apparently neutral address.
+        has_metadata = bool(
+            normalized.interface or normalized.description
+            or normalized.physical is not None or normalized.virtual is not None
+        )
+        current_has_metadata = bool(
+            current and (
+                current.interface or current.description
+                or current.physical is not None or current.virtual is not None
+            )
+        )
+        if (
+            current is None
+            or (has_metadata and not current_has_metadata)
+            or (has_metadata == current_has_metadata
+                and _candidate_score(normalized) < _candidate_score(current))
+        ):
             best[value] = normalized
     return [item.address for item in sorted(best.values(), key=_candidate_score)]
 
@@ -261,12 +281,25 @@ def best_lan_address(default="127.0.0.1") -> str:
 
 def pairing_urls(path: str, port: int, *, scheme="http", preferred_host="") -> list[str]:
     """Build consistently ordered URLs for copy, QR, API and console output."""
-    hosts = []
+    # Adapter ranking remains authoritative.  request.host is useful as a
+    # known-working alternate, but an admin who opened Settings over a VPN must
+    # not make that VPN address the QR/copy default for ordinary LAN devices.
+    hosts = list(lan_addresses())
     if preferred_host:
-        host = urlsplit(f"//{preferred_host}").hostname or ""
+        raw_host = str(preferred_host).strip()
+        host = ""
+        # request.host parsing gives callers a bare IPv6 literal.  Feeding that
+        # back through urlsplit without brackets misreads ``fd00::1`` as host
+        # ``fd00``.  Accept an IP literal directly before handling IPv4:port.
+        try:
+            host = str(ipaddress.ip_address(raw_host.split("%", 1)[0]))
+        except ValueError:
+            try:
+                host = urlsplit(f"//{raw_host}").hostname or ""
+            except ValueError:
+                host = ""
         if _usable_address(host):
             hosts.append(host)
-    hosts.extend(lan_addresses())
     own = socket.gethostname().strip().lower()
     if own:
         hosts.append(own + ".local")

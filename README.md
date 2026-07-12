@@ -36,9 +36,10 @@ thousands of commanders feeding them:
 - **[EDDN](https://github.com/EDCD/EDDN)** · *Elite Dangerous Data Network* —
   the community's live data relay. Every fresh price here exists because
   another commander docked somewhere and their tool reported it. Frameshift
-  **contributes back anonymously**: markets, outfitting, shipyards, navigation,
-  exploration, Codex and biological-signal observations are published using EDDN's public
-  schemas. Reports are stripped of private fields and stamped with your game
+  **contributes markets back anonymously by default**. A separate, default-off
+  informed opt-in can also publish outfitting, shipyards, navigation,
+  exploration, Codex and biological-signal observations using EDDN's public
+  schemas. Reports use reviewed field allowlists and are stamped with your game
   version so consumers can keep Live and Legacy data separate.
 - **[Spansh](https://spansh.co.uk)** — the backbone of the app's data. The
   daily galaxy dump seeds the 36-million-price local database; the route APIs
@@ -169,5 +170,5 @@ Then:
 - **Live / Legacy**: anonymous community route and market tools are Live-galaxy data and fail closed while Legacy is running, rather than showing plausible but wrong advice. Local journal history and specialist tools remain available in the isolated Legacy profile.
 - **Online services**: community data uses public, anonymous EDDN and Spansh endpoints. No integration asks for a login or API key; the engineering catalog, journal history, planning and specialist tools are local.
 - **Diagnostics & extensions**: Settings can create a bounded, privacy-safe local support bundle that excludes journals, commander names, pairing secrets and databases. Permissioned declarative extension packs can add journal-driven alerts or objective suggestions; see [Extension API v1](docs/EXTENSIONS.md).
-- **Releases** (maintainer): push a `v*` tag; GitHub Actions tests on Windows and Linux, builds and smoke-tests the packaged app, publishes SHA-256 sidecars and releases the exe under both `Frameshift.exe` and the legacy `EliteTrader.exe` name. The updater requires a trusted checksum and keeps a rollback copy before replacing the executable.
+- **Releases** (maintainer): push a `v*` tag; GitHub Actions tests on Windows and Linux, builds and smoke-tests the packaged app, publishes SHA-256 sidecars and releases the exe under both `Frameshift.exe` and the legacy `EliteTrader.exe` name. The updater uses that same-release checksum to detect corruption or truncation (it is not an independent publisher signature) and retains the rollback through a sustained healthy launch and a later successful startup.
 - Something broken? [Troubleshooting & FAQ](../../wiki/Troubleshooting-and-FAQ).

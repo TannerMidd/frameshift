@@ -48,6 +48,17 @@ _CONTROL_ENDPOINTS = {
     "/api/watch", "/api/watch/remove", "/api/alerts/clear",
     "/api/plot", "/api/plot/cancel",
 }
+_COMMANDER_SCOPED_PREFIXES = (
+    "/api/engineering",
+    "/api/objectives",
+    "/api/timings",
+    "/api/history",
+    "/api/operations",
+    "/api/specialists",
+    "/api/alerts",
+    "/api/watch",
+    "/api/analytics",
+)
 
 
 def _host_allowed(host):
@@ -107,7 +118,8 @@ def _required_scope():
         return None
     if path == "/api/security/session":
         return "read"  # every device may revoke its own credential
-    if path.startswith("/api/security/devices/") or path in _ADMIN_ENDPOINTS:
+    if (path.startswith("/api/security/devices/")
+            or path.startswith("/api/extensions/") or path in _ADMIN_ENDPOINTS):
         return "admin"
     if path in _CONTROL_ENDPOINTS:
         return "control"
@@ -202,8 +214,20 @@ def create_app(state, security_manager=None):
     app.extensions["frameshift_security"] = security
 
     def commander_id():
-        """Use the same profile identity as the in-memory cockpit snapshot."""
-        return getattr(state, "commander_id", None) or marketdb.active_commander_id()
+        """Use only the identity currently established in the live snapshot.
+
+        The process-wide active DB profile deliberately lags during a journal
+        handoff. Falling back to it here would serve the previous commander's
+        objectives and workflows beneath the new, temporarily empty cockpit.
+        """
+        value = str(getattr(g, "frameshift_commander_id", None) or "").strip()
+        if not value:
+            raise RuntimeError("commander profile is not established")
+        return value
+
+    def request_state_snapshot():
+        """Return the one live-state image captured when this request began."""
+        return g.frameshift_state_snapshot
 
     @app.before_request
     def _validate_request_source():
@@ -222,6 +246,13 @@ def create_app(state, security_manager=None):
         g.frameshift_local = local
         g.frameshift_device = None
         g.frameshift_bearer = False
+        # Pin one complete state image for the whole request. A journal
+        # handoff can reset or replace AppState while a threaded request is
+        # between its read and write phases; every commander-owned operation
+        # in that request must nevertheless use one discriminator or fail.
+        g.frameshift_state_snapshot = state.snapshot()
+        g.frameshift_commander_id = str(
+            g.frameshift_state_snapshot.get("commander_id") or "").strip() or None
 
         # Reject cross-origin browser requests even before authentication.  In
         # particular, Sec-Fetch-Site covers tags/forms that omit Origin.
@@ -320,7 +351,8 @@ def create_app(state, security_manager=None):
                 response.status_code = 429
                 response.headers["Retry-After"] = str(retry)
                 return response
-        if request.path in _LIVE_GALAXY_ENDPOINTS and state.galaxy_mode == "legacy":
+        if (request.path in _LIVE_GALAXY_ENDPOINTS
+                and request_state_snapshot().get("galaxy_mode") == "legacy"):
             return jsonify({
                 "error": (
                     "This tool uses anonymous Live-galaxy community data and is disabled while "
@@ -328,6 +360,27 @@ def create_app(state, security_manager=None):
                 ),
                 "galaxy_mode": "legacy",
             }), 409
+        if (request.path.startswith(_COMMANDER_SCOPED_PREFIXES)
+                and not g.frameshift_commander_id):
+            return jsonify({
+                "error": "Commander profile is changing. Try again after the journal identity is established.",
+                "profile_pending": True,
+            }), 409
+        if request.path.startswith(_COMMANDER_SCOPED_PREFIXES):
+            expected_commander = str(
+                request.headers.get("X-Frameshift-Commander") or ""
+            ).strip()
+            if _is_side_effect() and not expected_commander:
+                return jsonify({
+                    "error": "Commander confirmation is required. Refresh Frameshift and try again.",
+                    "profile_changed": True,
+                }), 409
+            if expected_commander and expected_commander != g.frameshift_commander_id:
+                return jsonify({
+                    "error": "Commander changed before this action arrived. Nothing was modified.",
+                    "profile_changed": True,
+                    "commander_id": g.frameshift_commander_id,
+                }), 409
         return None
 
     @app.after_request
@@ -483,7 +536,7 @@ def create_app(state, security_manager=None):
 
     @app.get("/api/state")
     def api_state():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         snap["links"] = links.build_links(snap.get("system"), snap.get("station"))
         resp = jsonify(snap)
         resp.headers["Cache-Control"] = "no-store"
@@ -491,7 +544,7 @@ def create_app(state, security_manager=None):
 
     @app.post("/api/trade-route")
     def api_trade_route():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         body = request.get_json(silent=True) or {}
 
         def num(key, default, cast=float):
@@ -572,7 +625,7 @@ def create_app(state, security_manager=None):
 
     @app.get("/api/commodity-search")
     def api_commodity_search():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         args = request.args
 
         def num(key, default, cast=float):
@@ -598,7 +651,7 @@ def create_app(state, security_manager=None):
 
     @app.get("/api/mining")
     def api_mining():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         args = request.args
 
         def num(key, default, cast=float):
@@ -622,7 +675,7 @@ def create_app(state, security_manager=None):
 
     @app.get("/api/mining/hotspots")
     def api_mining_hotspots():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         mineral = (request.args.get("mineral") or "").strip()
         if not mineral:
             return jsonify({"error": "No mineral given."}), 400
@@ -635,7 +688,7 @@ def create_app(state, security_manager=None):
 
     @app.get("/api/exobio-route")
     def api_exobio_route():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         args = request.args
 
         def num(key, default, cast=float):
@@ -663,7 +716,7 @@ def create_app(state, security_manager=None):
     def api_system_stations():
         """Stations of a system: Spansh station facts (services, economy,
         pads) merged with local-DB market freshness."""
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         name = (request.args.get("system") or snap.get("system") or "").strip()
         if not name:
             return jsonify({"error": "No system known yet."}), 400
@@ -696,17 +749,23 @@ def create_app(state, security_manager=None):
     @app.get("/api/engineering")
     def api_engineering():
         """Complete local catalog and a shared material plan for the wishlist."""
-        from elite import blueprints, engineering_catalog
+        from elite import blueprints, engineering_catalog, wishlist
 
-        inventory = blueprints.inventory_from_snapshot(state.snapshot())
-        saved = settings.get("pinned_blueprints", [])
+        inventory = blueprints.inventory_from_snapshot(request_state_snapshot())
+        legacy, _legacy_changed = blueprints.normalize_wishlist(
+            settings.get("pinned_blueprints", []))
+        saved, adopted = wishlist.load(commander_id(), legacy_items=legacy)
         pinned, migrated = blueprints.normalize_wishlist(saved)
         if migrated:
-            # Includes transparent migration of the two v1 starter-blueprint
-            # names to stable catalog IDs.  No setup or re-pinning required.
-            settings.update({"pinned_blueprints": pinned})
+            wishlist.save(commander_id(), pinned)
+        if adopted:
+            # The DB transaction owns the migration marker. Clearing the old
+            # JSON only after commit makes a settings-write failure harmless:
+            # another commander can never adopt the same legacy pins.
+            settings.update({"pinned_blueprints": []})
         wishlist = blueprints.plan_wishlist(pinned, inventory)
         return jsonify({
+            "commander_id": commander_id(),
             "catalog": engineering_catalog.catalog_payload(),
             "wishlist": wishlist,
             "info": blueprints.BLUEPRINT_INFO,
@@ -720,11 +779,12 @@ def create_app(state, security_manager=None):
 
     @app.post("/api/engineering/pin")
     def api_engineering_pin():
-        from elite import blueprints
+        from elite import blueprints, wishlist
 
         body = request.get_json(silent=True) or {}
         candidate, _changed = blueprints.normalize_wishlist([body])
-        saved, _migrated = blueprints.normalize_wishlist(settings.get("pinned_blueprints", []))
+        saved, _adopted = wishlist.load(commander_id())
+        saved, _migrated = blueprints.normalize_wishlist(saved)
         if body.get("action") == "unpin":
             remove_id = candidate[0]["id"] if candidate else (body.get("id") or body.get("name"))
             pinned = [p for p in saved if p["id"] != remove_id]
@@ -734,8 +794,8 @@ def create_app(state, security_manager=None):
             item = candidate[0]
             pinned = [p for p in saved if p["id"] != item["id"]]
             pinned.append(item)
-        settings.update({"pinned_blueprints": pinned})
-        return jsonify({"ok": True, "pinned": pinned})
+        wishlist.save(commander_id(), pinned)
+        return jsonify({"ok": True, "commander_id": commander_id(), "pinned": pinned})
 
     @app.get("/api/objectives")
     def api_objectives():
@@ -789,7 +849,7 @@ def create_app(state, security_manager=None):
 
     @app.post("/api/objectives/plan")
     def api_objectives_plan():
-        from . import blueprints
+        from . import blueprints, wishlist
         from .objectives import ObjectiveEngine
 
         body = request.get_json(silent=True) or {}
@@ -799,9 +859,15 @@ def create_app(state, security_manager=None):
             max_tasks = max(1, min(30, int(body.get("max_tasks") or 12)))
         except (TypeError, ValueError):
             return jsonify({"error": "Time budget and task count must be numbers."}), 400
-        snapshot = state.snapshot()
+        snapshot = request_state_snapshot()
         inventory = blueprints.inventory_from_snapshot(snapshot)
-        pins, _ = blueprints.normalize_wishlist(settings.get("pinned_blueprints", []))
+        legacy, _ = blueprints.normalize_wishlist(settings.get("pinned_blueprints", []))
+        stored, adopted = wishlist.load(commander_id(), legacy_items=legacy)
+        pins, migrated = blueprints.normalize_wishlist(stored)
+        if migrated:
+            wishlist.save(commander_id(), pins)
+        if adopted:
+            settings.update({"pinned_blueprints": []})
         snapshot["engineering_plans"] = blueprints.plan_wishlist(pins, inventory).get("items", [])
         context = body.get("context") or {}
         if not isinstance(context, dict):
@@ -957,7 +1023,7 @@ def create_app(state, security_manager=None):
     @app.post("/api/cargo-recovery")
     def api_cargo_recovery():
         body = request.get_json(silent=True) or {}
-        snapshot = state.snapshot()
+        snapshot = request_state_snapshot()
         try:
             result = routes.recover_cargo(
                 snapshot.get("cargo_inventory") or [], system=snapshot.get("system"),
@@ -976,14 +1042,26 @@ def create_app(state, security_manager=None):
         from .specialists import SpecialistWorkflows
 
         workflows = SpecialistWorkflows(commander_id())
-        workflows.exobiology.update_position(state.snapshot().get("pos"))
+        workflows.exobiology.update_position(request_state_snapshot().get("pos"))
         return workflows
 
     def _specialist_response(workflows):
-        payload = workflows.snapshot()
+        def positive_int(name, default, maximum):
+            try:
+                return max(1, min(maximum, int(request.args.get(name) or default)))
+            except (TypeError, ValueError):
+                return default
+
+        payload = workflows.snapshot(exobiology_options={
+            "survey_page": positive_int("survey_page", 1, 1_000_000),
+            "survey_page_size": positive_int("survey_page_size", 50, 200),
+            "pin_page": positive_int("pin_page", 1, 1_000_000),
+            "pin_page_size": positive_int("pin_page_size", 200, 500),
+        })
         payload["mining"]["history"] = workflows.mining.history(20)
         payload["combat"]["history"] = workflows.combat.history(20)
-        state.update(specialists=payload)
+        payload["commander_id"] = commander_id()
+        state.update_for_commander(commander_id(), specialists=payload)
         return payload
 
     @app.get("/api/specialists")
@@ -1077,7 +1155,7 @@ def create_app(state, security_manager=None):
 
     @app.get("/api/material-traders")
     def api_material_traders():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         ref = request.args.get("system") or snap.get("system")
         kind = request.args.get("kind", "raw")
         try:
@@ -1090,7 +1168,7 @@ def create_app(state, security_manager=None):
     def api_sell_data():
         """Nearest ports to sell exploration data (Universal Cartographics) and
         bio samples (Vista Genomics) — the deep-space 'get me home' search."""
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         ref = request.args.get("system") or snap.get("system")
         include_carriers = request.args.get("carriers") == "1"
         out = {}
@@ -1109,7 +1187,7 @@ def create_app(state, security_manager=None):
         """Nearest stations with an Interstellar Factors contact — the service
         that clears bounties and fines (for a 25% cut) without flying to the
         issuing faction's space."""
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         ref = request.args.get("system") or snap.get("system")
         try:
             rows = spansh.service_stations(
@@ -1203,7 +1281,7 @@ def create_app(state, security_manager=None):
 
     @app.post("/api/riches")
     def api_riches():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         body = request.get_json(silent=True) or {}
 
         def num(key, default, cast=float):
@@ -1229,7 +1307,7 @@ def create_app(state, security_manager=None):
 
     @app.post("/api/neutron")
     def api_neutron():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         body = request.get_json(silent=True) or {}
         to_system = (body.get("to") or "").strip()
         if not to_system:
@@ -1254,7 +1332,7 @@ def create_app(state, security_manager=None):
 
     @app.get("/api/station-search")
     def api_station_search():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         q = (request.args.get("q") or "").strip()
         kind = request.args.get("type", "module")
         if not q:
@@ -1272,7 +1350,7 @@ def create_app(state, security_manager=None):
 
     @app.get("/api/cargo-sell")
     def api_cargo_sell():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         args = request.args
 
         def num(key, default, cast=float):
@@ -1296,7 +1374,7 @@ def create_app(state, security_manager=None):
 
     @app.get("/api/colonisation-sources")
     def api_colonisation_sources():
-        snap = state.snapshot()
+        snap = request_state_snapshot()
         try:
             market_id = int(request.args.get("market_id", 0))
         except ValueError:
@@ -1327,7 +1405,10 @@ def create_app(state, security_manager=None):
 
     @app.get("/api/alerts")
     def api_alerts():
-        resp = jsonify(alerts.snapshot(commander_id()))
+        active_commander_id = commander_id()
+        payload = alerts.snapshot(active_commander_id)
+        payload["commander_id"] = active_commander_id
+        resp = jsonify(payload)
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
@@ -1415,7 +1496,7 @@ def create_app(state, security_manager=None):
             period_earnings = earnings_since(since)
 
             # Live session: earnings since the current game launch.
-            sess = state.snapshot().get("session") or {}
+            sess = request_state_snapshot().get("session") or {}
             session = dict(sess)
             if sess.get("start_ts"):
                 sp = profit_since(sess["start_ts"])
@@ -1425,6 +1506,7 @@ def create_app(state, security_manager=None):
         finally:
             conn.close()
         resp = jsonify({
+            "commander_id": active_commander_id,
             "balance": [{"ts": t, "balance": b} for t, b in balance],
             "daily": [{"date": d, "profit": p or 0, "tons": t or 0} for d, p, t in daily],
             "today": today,
@@ -1523,6 +1605,24 @@ def create_app(state, security_manager=None):
         from .extensions import EXTENSIONS
 
         return jsonify(EXTENSIONS.reload())
+
+    @app.post("/api/extensions/<extension_id>/approve")
+    def api_extension_approve(extension_id):
+        from .extensions import EXTENSIONS, ExtensionError
+
+        try:
+            return jsonify(EXTENSIONS.approve_process(extension_id))
+        except ExtensionError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.post("/api/extensions/<extension_id>/revoke")
+    def api_extension_revoke(extension_id):
+        from .extensions import EXTENSIONS, ExtensionError
+
+        try:
+            return jsonify(EXTENSIONS.revoke_process(extension_id))
+        except ExtensionError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     @app.get("/api/settings")
     def api_settings_get():

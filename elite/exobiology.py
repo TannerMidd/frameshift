@@ -11,6 +11,10 @@ from .workflowdb import WorkflowStore, event_epoch_ms
 
 WORKFLOW = "exobiology_map"
 MAX_PINS_PER_BODY = 2_000
+DEFAULT_SURVEY_PAGE_SIZE = 50
+MAX_SURVEY_PAGE_SIZE = 200
+DEFAULT_PIN_PAGE_SIZE = 200
+MAX_PIN_PAGE_SIZE = 500
 JOURNAL_EVENTS = frozenset(
     {
         "ApproachBody",
@@ -180,7 +184,31 @@ def _pin(
     return pin
 
 
-def _present(state: dict, position: dict | None, body=None) -> dict:
+def _page_number(value, default=1) -> int:
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _page_size(value, default, maximum) -> int:
+    try:
+        return max(1, min(maximum, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _present(
+    state: dict,
+    position: dict | None,
+    body=None,
+    *,
+    survey_page=1,
+    survey_page_size=DEFAULT_SURVEY_PAGE_SIZE,
+    pin_page=1,
+    pin_page_size=DEFAULT_PIN_PAGE_SIZE,
+    _pin_page_size_cap=MAX_PIN_PAGE_SIZE,
+) -> dict:
     position = normalise_position(position)
     surveys = state.get("surveys") or {}
     chosen = None
@@ -204,8 +232,18 @@ def _present(state: dict, position: dict | None, body=None) -> dict:
         if center is None and chosen.get("pins"):
             first = chosen["pins"][0]
             center = {"lat": first["lat"], "lon": first["lon"], "radius_m": radius}
+        all_pins = chosen.get("pins") or []
+        pin_page = _page_number(pin_page)
+        pin_page_size = _page_size(
+            pin_page_size, DEFAULT_PIN_PAGE_SIZE, _pin_page_size_cap)
+        pin_total = len(all_pins)
+        # Page one is the most recent set because that is what the live cockpit
+        # needs. Keep each page chronological so the existing reverse render
+        # still displays newest-first.
+        pin_end = max(0, pin_total - (pin_page - 1) * pin_page_size)
+        pin_start = max(0, pin_end - pin_page_size)
         pins = []
-        for item in chosen.get("pins") or []:
+        for item in all_pins[pin_start:pin_end]:
             point = dict(item)
             vector = surface_vector(center, point, radius) if center else {
                 "distance_m": None, "bearing_deg": None, "east_m": None, "north_m": None
@@ -217,7 +255,16 @@ def _present(state: dict, position: dict | None, body=None) -> dict:
             else:
                 vector["relative_bearing_deg"] = None
             pins.append({**point, **vector})
-        rendered = {**chosen, "radius_m": radius, "pins": pins, "center": center}
+        rendered = {
+            **chosen,
+            "radius_m": radius,
+            "pins": pins,
+            "pins_total": pin_total,
+            "pin_page": pin_page,
+            "pin_page_size": pin_page_size,
+            "pin_pages": max(1, math.ceil(pin_total / pin_page_size)),
+            "center": center,
+        }
 
     sampling = dict(state.get("sampling") or {}) or None
     if sampling and position:
@@ -245,13 +292,23 @@ def _present(state: dict, position: dict | None, body=None) -> dict:
         for survey in surveys.values()
     ]
     index.sort(key=lambda row: row.get("updated_ts") or 0, reverse=True)
+    survey_page = _page_number(survey_page)
+    survey_page_size = _page_size(
+        survey_page_size, DEFAULT_SURVEY_PAGE_SIZE, MAX_SURVEY_PAGE_SIZE)
+    survey_total = len(index)
+    survey_start = (survey_page - 1) * survey_page_size
+    survey_rows = index[survey_start:survey_start + survey_page_size]
     return {
         "system": state.get("system"),
         "system_address": state.get("system_address"),
         "position": position,
         "sampling": sampling,
         "current_map": rendered,
-        "surveys": index,
+        "surveys": survey_rows,
+        "survey_page": survey_page,
+        "survey_page_size": survey_page_size,
+        "surveys_total": survey_total,
+        "survey_pages": max(1, math.ceil(survey_total / survey_page_size)),
         "last_sale_ts": state.get("last_sale_ts"),
     }
 
@@ -460,11 +517,24 @@ class ExobiologyMapper:
         self.store.mutate(change)
         return removed
 
-    def snapshot(self, body=None) -> dict:
-        return _present(self.store.load(), self._position, body)
+    def snapshot(
+        self, body=None, *, survey_page=1, survey_page_size=DEFAULT_SURVEY_PAGE_SIZE,
+        pin_page=1, pin_page_size=DEFAULT_PIN_PAGE_SIZE,
+    ) -> dict:
+        return _present(
+            self.store.load(), self._position, body,
+            survey_page=survey_page, survey_page_size=survey_page_size,
+            pin_page=pin_page, pin_page_size=pin_page_size,
+        )
 
     def geojson(self, body=None) -> dict:
-        current = self.snapshot(body).get("current_map")
+        # Explicit export remains complete (and is still bounded by
+        # MAX_PINS_PER_BODY); ordinary polling uses the much smaller page.
+        current = _present(
+            self.store.load(), self._position, body,
+            pin_page_size=MAX_PINS_PER_BODY,
+            _pin_page_size_cap=MAX_PINS_PER_BODY,
+        ).get("current_map")
         features = []
         for pin in (current or {}).get("pins") or []:
             properties = {

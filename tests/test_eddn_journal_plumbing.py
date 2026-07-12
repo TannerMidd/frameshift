@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 _tmp = tempfile.TemporaryDirectory()
 os.environ["ET_DATA_DIR"] = _tmp.name
+os.environ["ET_EDDN_EXTENDED_UPLOAD"] = "1"
 
 from elite import eddn_upload  # noqa: E402
 from elite.journal import JournalWatcher  # noqa: E402

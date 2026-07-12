@@ -42,8 +42,9 @@ def loop(label):
     }
 
 
-# Data created before commander identities existed belongs to the first real
-# commander the journal discovers. Seed every profile-scoped durable table.
+# User-authored preferences created before an identity existed belong to the
+# first commander. Derived v2.0 history may contain several accounts and must
+# stay quarantined until the journal importer reconstructs attributed rows.
 legacy_watch = {
     "label": "Legacy route",
     "market_ids": [901, 902],
@@ -51,6 +52,10 @@ legacy_watch = {
     "profit": 10,
 }
 conn = marketdb.connect()
+conn.execute(
+    "INSERT OR REPLACE INTO user_meta(key,value)"
+    " VALUES('migrated_from_market_db','v2.0 test fixture')"
+)
 conn.execute(
     "INSERT INTO trade_log"
     "(commander_id, ts, event, symbol, name, count, price, total, profit)"
@@ -71,14 +76,20 @@ alpha = marketdb.ensure_commander_profile("Alpha")
 assert marketdb.active_commander_id() == alpha
 
 user = marketdb.connect_user()
-for table in ("trade_log", "balance_log", "income_log", "imported_journals",
-              "tracked_markets", "watches"):
+for table in ("tracked_markets", "watches"):
     assert user.execute(
         f"SELECT COUNT(*) FROM {table} WHERE commander_id = 'default'"
     ).fetchone()[0] == 0, f"{table} retained legacy default rows"
     assert user.execute(
         f"SELECT COUNT(*) FROM {table} WHERE commander_id = ?", (alpha,)
     ).fetchone()[0] >= 1, f"{table} was not adopted by the first commander"
+for table in ("trade_log", "balance_log", "income_log", "imported_journals"):
+    assert user.execute(
+        f"SELECT COUNT(*) FROM {table} WHERE commander_id = 'default'"
+    ).fetchone()[0] >= 1, f"{table} mixed history was not quarantined"
+    assert user.execute(
+        f"SELECT COUNT(*) FROM {table} WHERE commander_id = ?", (alpha,)
+    ).fetchone()[0] == 0, f"{table} mixed history was misattributed to Alpha"
 assert user.execute(
     "SELECT value FROM user_meta WHERE key = 'default_profile_adopted_by'"
 ).fetchone()[0] == alpha
@@ -123,7 +134,7 @@ assert 111 in marketdb.tracked_ids() and 222 not in marketdb.tracked_ids()
 marketdb.ensure_commander_profile("Beta")
 assert 222 in marketdb.tracked_ids() and 111 not in marketdb.tracked_ids()
 
-print("commander storage OK: active defaults, one-time adoption, isolated tracking cache")
+print("commander storage OK: safe preference adoption, history quarantine, isolated tracking cache")
 
 # Watches are loaded, inserted, updated, deleted, and snapshotted only for the
 # selected commander. Both pilots watch the same market to prove that EDDN

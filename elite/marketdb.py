@@ -249,13 +249,13 @@ def commander_profile_id(name, galaxy_mode=None):
 
 
 def _adopt_default_profile_rows(conn, commander_id):
-    """Move pre-profile data to the first real commander, exactly once.
+    """Move pre-profile user preferences to the first real commander once.
 
     Early releases necessarily wrote durable rows under ``default`` because
-    no commander identity existed in storage yet.  The first actual commander
-    loaded by the journal owns those rows.  The migration runs inside the same
-    immediate transaction as profile activation, so a crash can neither split
-    the data nor mark a partial adoption complete.
+    no commander identity existed in storage yet. User-authored preferences
+    belong to the first commander loaded by the journal. Analytics do not:
+    multi-account v2.0 installations mixed several pilots in that bucket, so
+    those rows remain quarantined and are rebuilt from each journal's owner.
 
     Compound-key tables are copied under the new discriminator before their
     old rows are removed. ``INSERT OR REPLACE`` also makes an interrupted
@@ -278,7 +278,18 @@ def _adopt_default_profile_rows(conn, commander_id):
         row[0]
         for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
-    for table in sorted(commanderdb.PROFILE_SCOPED_TABLES & tables):
+    migrated_legacy = conn.execute(
+        "SELECT 1 FROM user_meta WHERE key = 'migrated_from_market_db'"
+    ).fetchone()
+    # A fresh v2.1 installation can legitimately create a manual objective,
+    # timing sample, or specialist session before Elite first identifies the
+    # pilot; all such rows have one owner. Only a migrated v2.0 database has
+    # the multi-account ambiguity that requires derived-history quarantine.
+    adoptable = (
+        commanderdb.DEFAULT_PROFILE_ADOPTABLE_TABLES
+        if migrated_legacy else commanderdb.PROFILE_SCOPED_TABLES
+    )
+    for table in sorted(adoptable & tables):
         quoted_table = commanderdb.quote_identifier(table)
         info = conn.execute(f"PRAGMA table_info({quoted_table})").fetchall()
         columns = [row[1] for row in info]

@@ -231,6 +231,41 @@ assert len(bio.snapshot()["current_map"]["pins"]) == 4  # the map is knowledge, 
 reloaded = ExobiologyMapper(commander_id)
 assert len(reloaded.snapshot()["current_map"]["pins"]) == 4
 
+# Ordinary specialist polling is paged even when a long expedition has a large
+# local survey archive. Explicit GeoJSON export remains complete.
+def seed_large_archive(state):
+    original = next(iter(state["surveys"].values()))
+    original["pins"] = [
+        {
+            "id": f"pin-{index}", "kind": "waypoint", "label": f"Pin {index}",
+            "lat": index / 10_000, "lon": 0.0, "heading": None, "alt_m": None,
+            "timestamp": index, "source": "test", "metadata": {},
+        }
+        for index in range(600)
+    ]
+    for index in range(225):
+        key = f"archive-{index}"
+        state["surveys"][key] = {
+            "key": key, "system": "Archive", "system_address": index,
+            "body": f"Archive {index}", "body_id": index, "radius_m": 1_000_000,
+            "signal_count": None, "genuses": [], "pins": [], "completed": {},
+            "truncated_pins": 0, "updated_ts": index,
+        }
+    return True
+
+
+reloaded.store.mutate(seed_large_archive)
+paged = reloaded.snapshot(
+    body="Test System 2 a", survey_page=2, survey_page_size=25,
+    pin_page=2, pin_page_size=50,
+)
+assert paged["surveys_total"] == 226 and len(paged["surveys"]) == 25
+assert paged["survey_page"] == 2 and paged["survey_pages"] == 10
+assert paged["current_map"]["pins_total"] == 600
+assert len(paged["current_map"]["pins"]) == 50
+assert paged["current_map"]["pins"][0]["id"] == "pin-500"
+assert len(reloaded.geojson("Test System 2 a")["features"]) == 600
+
 vector = surface_vector(
     {"lat": 0, "lon": 0, "radius_m": 1_000_000},
     {"lat": 0, "lon": 0.1},

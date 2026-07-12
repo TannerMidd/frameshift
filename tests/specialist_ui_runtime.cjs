@@ -103,6 +103,7 @@ const localStorageStub = {
 };
 
 const emptySnapshot = {
+  commander_id: "cmdr-runtime-test",
   mining: { active: false, session: null, history: [] },
   combat: {
     active: false, session: null, target: null, history: [],
@@ -171,6 +172,7 @@ for (const name of required) {
 }
 
 (async () => {
+  vm.runInContext('state = { commander_id: "cmdr-runtime-test", commander: "Runtime Test" };', context);
   vm.runInContext("initSpecialists()", context);
   await vm.runInContext("loadSpecialists()", context);
   const renderedState = vm.runInContext("specialistState", context);

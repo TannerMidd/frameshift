@@ -5,6 +5,9 @@ import json
 import os
 import sys
 import tempfile
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
@@ -64,6 +67,37 @@ ops.update("boards", board["id"], description="newer local description")
 stale = ops.import_json(document)
 assert stale["kept_local"] >= 1
 assert ops.snapshot(board["id"])["board"]["description"] == "newer local description"
+
+# Local HTTP requests are served concurrently.  A writer that begins while
+# another write transaction is active must wait, then merge its field change
+# against the newly committed revision instead of overwriting it from a stale
+# read.  Holding the first transaction makes this ordering deterministic.
+holder = marketdb.connect_user()
+holder.execute("BEGIN IMMEDIATE")
+held = holder.execute(
+    "SELECT revision FROM operation_boards WHERE id=?", (board["id"],)
+).fetchone()[0]
+holder.execute(
+    "UPDATE operation_boards SET description=?, revision=? WHERE id=?",
+    ("concurrent description", held + 1, board["id"]),
+)
+started = threading.Event()
+
+def concurrent_status_update():
+    started.set()
+    return OperationsBoard(commander).update("boards", board["id"], status="paused")
+
+with ThreadPoolExecutor(max_workers=1) as executor:
+    pending = executor.submit(concurrent_status_update)
+    assert started.wait(2)
+    time.sleep(0.1)
+    assert not pending.done(), "concurrent update did not wait for the active writer"
+    holder.commit()
+    concurrent = pending.result(timeout=5)
+holder.close()
+assert concurrent["status"] == "paused"
+assert concurrent["description"] == "concurrent description"
+assert concurrent["revision"] == held + 2
 
 # Immutable contribution IDs allow independently-created rows to merge without
 # last-writer loss.
