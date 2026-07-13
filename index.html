@@ -158,6 +158,7 @@
     .row, .row.flip { grid-template-columns: 1fr; gap: 18px; }
     .row.flip .row-copy { order: 0; }
   }
+  .tour-note { margin: 44px auto 0; max-width: 72ch; text-align: center; color: var(--dim); font-size: 14px; }
 
   /* ---------- steps ---------- */
   .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
@@ -258,10 +259,10 @@
 
 <section id="tour">
   <div class="wrap">
-    <div class="sec-label">Flight deck tour</div>
+    <div class="sec-label">Flight panel tour</div>
 
     <div class="row">
-      <div class="frame"><a href="assets/shot-trade.png" target="_blank" rel="noopener" title="Open full size"><img src="assets/shot-trade.png" alt="Trade routes tab: locally computed loops with confidence scores and profit per hour" loading="lazy"></a></div>
+      <div class="frame"><a href="assets/shot-trade.png" target="_blank" rel="noopener" title="Open full size"><img src="assets/shot-trade.png" alt="Panel-mode trade page: locally computed loops with confidence scores and profit per hour" loading="lazy"></a></div>
       <div class="row-copy">
         <h3>Routes you can trust, computed on your machine</h3>
         <p>No waiting on a website: the whole galaxy's markets live in a local database kept fresh by EDDN.</p>
@@ -275,7 +276,7 @@
     </div>
 
     <div class="row flip">
-      <div class="frame"><a href="assets/shot-galaxy.png" target="_blank" rel="noopener" title="Open full size"><img src="assets/shot-galaxy.png" alt="Galaxy tab: Powerplay primer, system factions with influence and reputation" loading="lazy"></a></div>
+      <div class="frame"><a href="assets/shot-galaxy.png" target="_blank" rel="noopener" title="Open full size"><img src="assets/shot-galaxy.png" alt="Panel-mode galaxy page: Powerplay primer, system factions with influence and reputation" loading="lazy"></a></div>
       <div class="row-copy">
         <h3>Know every system you drop into</h3>
         <p>Factions, influence, states, conflicts and your reputation — captured from your own journal on arrival.</p>
@@ -289,7 +290,7 @@
     </div>
 
     <div class="row">
-      <div class="frame"><a href="assets/shot-ops.png" target="_blank" rel="noopener" title="Open full size"><img src="assets/shot-ops.png" alt="Ops tab: local mission control with time-budgeted session planner and personal objectives" loading="lazy"></a></div>
+      <div class="frame"><a href="assets/shot-ops.png" target="_blank" rel="noopener" title="Open full size"><img src="assets/shot-ops.png" alt="Panel-mode ops page: local mission control with time-budgeted session planner and objectives" loading="lazy"></a></div>
       <div class="row-copy">
         <h3>“I have 90 minutes — what's worth starting?”</h3>
         <p>Local Mission Control ranks your known work by urgency, value, risk and the time you actually have.</p>
@@ -303,7 +304,7 @@
     </div>
 
     <div class="row flip">
-      <div class="frame"><a href="assets/shot-explore.png" target="_blank" rel="noopener" title="Open full size"><img src="assets/shot-explore.png" alt="Explore tab: exobiology routing, bio prediction and exploration tools" loading="lazy"></a></div>
+      <div class="frame"><a href="assets/shot-explore.png" target="_blank" rel="noopener" title="Open full size"><img src="assets/shot-explore.png" alt="Panel-mode explore page: exobiology routing, bio prediction and exploration tools" loading="lazy"></a></div>
       <div class="row-copy">
         <h3>Exploration that pays, exobiology that lands</h3>
         <p>From Road to Riches to Vista Genomics: plan the route, find the bios, protect the payout.</p>
@@ -317,7 +318,7 @@
     </div>
 
     <div class="row">
-      <div class="frame"><a href="assets/shot-engineering.png" target="_blank" rel="noopener" title="Open full size"><img src="assets/shot-engineering.png" alt="Engineering tab: engineer unlock progress with grade pips and specialties" loading="lazy"></a></div>
+      <div class="frame"><a href="assets/shot-engineering.png" target="_blank" rel="noopener" title="Open full size"><img src="assets/shot-engineering.png" alt="Panel-mode engineering page: engineer unlock progress with grade pips and specialties" loading="lazy"></a></div>
       <div class="row-copy">
         <h3>Engineering without the wiki spelunking</h3>
         <p>Every engineer, every recipe, every material — offline, on your machine, aware of your progress.</p>
@@ -329,6 +330,9 @@
         </ul>
       </div>
     </div>
+
+    <p class="tour-note">Every page above is the touch-first flight panel — the view Frameshift opens with.
+      Prefer a mouse? The same app also serves a full desktop workspace with every card in tabbed form.</p>
   </div>
 </section>
 
