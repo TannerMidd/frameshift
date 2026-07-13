@@ -15,7 +15,7 @@
 > project built for my own use — shared as-is, and anyone is welcome to use it.
 
 [**Download**](https://github.com/TannerMidd/frameshift/releases/latest) ·
-[**Demo**](https://tannermidd.github.io/frameshift/) ·
+[**Website**](https://tannermidd.github.io/frameshift/) ·
 [**Documentation**](../../wiki)
 
 <img src="docs/screenshots/frameshift-panel-hero.png" alt="Frameshift flight panel on a tablet" width="850">
