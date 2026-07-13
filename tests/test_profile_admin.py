@@ -104,6 +104,43 @@ conn.close()
 # Idempotent re-run is a no-op.
 assert marketdb.assign_unattributed_history(real)["rows"] == 0
 
+# --- per-file bookkeeping never moves and never counts ------------------------
+# Regression: owner-less launcher stubs are recorded under `default`; moving
+# those markers with an assignment made every restart re-import the stubs and
+# resurrect the "unassigned history" banner.
+conn = marketdb.connect_user()
+conn.execute(
+    "CREATE TABLE IF NOT EXISTS ledger_journal_files("
+    "commander_id TEXT NOT NULL, file_key TEXT NOT NULL, size_bytes INTEGER,"
+    " mtime_ns INTEGER, content_hash TEXT, last_line INTEGER NOT NULL DEFAULT 0,"
+    " event_count INTEGER NOT NULL DEFAULT 0, first_event_ts INTEGER,"
+    " last_event_ts INTEGER, complete INTEGER NOT NULL DEFAULT 0,"
+    " imported_at TEXT, error TEXT, PRIMARY KEY(commander_id,file_key)) WITHOUT ROWID"
+)
+conn.execute(
+    "INSERT OR REPLACE INTO imported_journals(commander_id, filename)"
+    " VALUES('default', 'Journal.stub.log')"
+)
+conn.execute(
+    "INSERT OR REPLACE INTO ledger_journal_files(commander_id, file_key, complete)"
+    " VALUES('default', 'Journal.stub.log', 1)"
+)
+conn.execute("INSERT INTO watches(commander_id, created, payload) VALUES('default','x','{}')")
+conn.commit()
+conn.close()
+
+overview = marketdb.profile_overview()
+assert overview["unattributed"]["tables"] == {"watches": 1}, overview["unattributed"]
+result = marketdb.assign_unattributed_history(real)
+assert result["moved"] == {"watches": 1}, result
+conn = marketdb.connect_user()
+for table, key_column in (("imported_journals", "filename"), ("ledger_journal_files", "file_key")):
+    owner = conn.execute(
+        f"SELECT commander_id FROM {table} WHERE {key_column}='Journal.stub.log'"
+    ).fetchone()[0]
+    assert owner == "default", (table, owner)
+conn.close()
+
 # --- delete stale identity ----------------------------------------------------
 result = marketdb.delete_commander_profile(stale)
 assert result["removed"].get("trade_log") == 1

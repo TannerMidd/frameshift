@@ -478,7 +478,14 @@ def profile_overview():
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
         counts = {}
-        for table in sorted(set(commanderdb.PROFILE_SCOPED_TABLES) & existing):
+        # File-processing markers are internal bookkeeping, not commander
+        # history: they are never assignable and would otherwise show up as
+        # permanent phantom "records" in the unassigned bucket.
+        countable = (
+            set(commanderdb.PROFILE_SCOPED_TABLES)
+            - set(commanderdb.PER_FILE_BOOKKEEPING_TABLES)
+        )
+        for table in sorted(countable & existing):
             quoted = commanderdb.quote_identifier(table)
             info = conn.execute(f"PRAGMA table_info({quoted})").fetchall()
             if "commander_id" not in {row[1] for row in info}:
@@ -542,8 +549,12 @@ def assign_unattributed_history(commander_id):
     try:
         conn.execute("BEGIN IMMEDIATE")
         _require_profile(conn, commander_id)
+        # Bookkeeping markers stay under the identity that processed the file;
+        # see PER_FILE_BOOKKEEPING_TABLES for why moving them loops forever.
         moved = _move_commander_rows(
-            conn, "default", commander_id, commanderdb.PROFILE_SCOPED_TABLES)
+            conn, "default", commander_id,
+            set(commanderdb.PROFILE_SCOPED_TABLES)
+            - set(commanderdb.PER_FILE_BOOKKEEPING_TABLES))
         conn.execute(
             "INSERT OR REPLACE INTO user_meta(key, value)"
             " VALUES('default_profile_adopted_by', ?)",

@@ -24,6 +24,10 @@ DEFAULT_JOURNAL_DIR = (
 )
 BOOTSTRAP_MAX_FILES = 25
 BOOTSTRAP_MIN_FILES = 12  # context like colonization depots spans sessions
+
+# Events the game writes without a pilot (launcher/menu chrome). A completed
+# journal containing nothing else is a login-less stub.
+_SESSION_CHROME_EVENTS = frozenset({"Fileheader", "Shutdown", "Music", "Continued"})
 POLL_SECONDS = 1.0
 
 ED_STEAM_APP_ID = "359320"
@@ -2193,23 +2197,33 @@ class JournalWatcher:
                 if known_commander else "default"
             )
 
+            # Launcher stubs (the game was opened but no pilot logged in)
+            # contain only session chrome, so there is nothing worth keeping
+            # and no owner to keep it for. Skip ledger ingestion; the
+            # imported_journals marker below still records the file as
+            # processed so it is never rescanned.
+            stub_only = known_commander is None and all(
+                event.get("event") in _SESSION_CHROME_EVENTS for _, event in parsed
+            )
+
             # Full compressed history powers lifetime queries and future local
             # reducers. Source coordinates preserve legitimate identical events.
-            try:
-                from .eventledger import EventLedger
+            if not stub_only:
+                try:
+                    from .eventledger import EventLedger
 
-                stat = path.stat()
-                ledger = EventLedger(commander_id)
-                claim = ledger.prepare_journal(
-                    path.name, size_bytes=stat.st_size, mtime_ns=stat.st_mtime_ns)
-                if claim["needs_import"]:
-                    resume = claim["resume_after_line"]
-                    remaining = [(line, event) for line, event in parsed if line > resume]
-                    report = ledger.import_journal(
-                        path.name, remaining, size_bytes=stat.st_size, mtime_ns=stat.st_mtime_ns)
-            except Exception as exc:
-                log.warning("journal ledger backfill failed file=%s error=%s",
-                            path.name, type(exc).__name__, exc_info=True)
+                    stat = path.stat()
+                    ledger = EventLedger(commander_id)
+                    claim = ledger.prepare_journal(
+                        path.name, size_bytes=stat.st_size, mtime_ns=stat.st_mtime_ns)
+                    if claim["needs_import"]:
+                        resume = claim["resume_after_line"]
+                        remaining = [(line, event) for line, event in parsed if line > resume]
+                        report = ledger.import_journal(
+                            path.name, remaining, size_bytes=stat.st_size, mtime_ns=stat.st_mtime_ns)
+                except Exception as exc:
+                    log.warning("journal ledger backfill failed file=%s error=%s",
+                                path.name, type(exc).__name__, exc_info=True)
 
             if (commander_id, path.name) in done:
                 self._set_rebuild_progress("history", file_index, total_files)

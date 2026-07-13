@@ -1,38 +1,35 @@
-## Frameshift v2.1.3 — fast startup
+## Frameshift v2.1.4 — unassigned history stays assigned
 
-Starting Frameshift no longer spends minutes "restoring recent journals."
-On the same mechanical hard drive used for testing, a cold start that took
-over six minutes now publishes the live cockpit in about forty seconds, and
-warm starts are quicker still. Solid-state installs see proportionally faster
-results.
+Fixes the loop where the COMMANDER PROFILES card showed the same unassigned
+records again after every restart, no matter how many times you assigned
+them.
 
-### What was wrong
+### What was happening
 
-Version 2.1 made commander history durable: every replayed journal event can
-write analytics, timings and workflow state to `commander.db`. Three habits
-of that new storage layer multiplied badly on spinning disks:
+Elite writes a journal file every time the game launches — including launches
+where no pilot ever logs in (opened to the menu, then closed). Those stub
+files contain no commander name, so Frameshift correctly refuses to guess an
+owner and files their handful of records as unassigned.
 
-- every database connection re-ran a schema check that ended in a disk
-  flush, and the journal replay opens thousands of short-lived connections;
-- every tiny write was individually flushed to disk (`synchronous=FULL`),
-  turning a replay into thousands of physical disk waits;
-- the startup replay, the one-time history sweep and finalization each paid
-  those costs event by event.
+The bug: assigning that history to your commander also moved the internal
+"this file was already processed" markers. On the next start, the journal
+sweep no longer remembered the stub files, imported them again, and the same
+records reappeared as unassigned — forever.
 
 ### What changed
 
-- Opening `commander.db` is now write-free once the database is current; the
-  schema/upgrade transaction runs only when a version marker says it must.
-- Commander storage uses SQLite's WAL journal with `synchronous=NORMAL` —
-  the standard pairing. Commits cannot corrupt the database; only an
-  operating-system crash can lose the newest moments, and everything stored
-  here is rebuilt from your journals anyway.
-- Journal reconstruction (startup replay, history sweep, finalization) now
-  borrows one shared database connection instead of opening one per event.
+- Assigning unassigned history now moves only the history itself. The
+  per-file processing markers stay put, so assigned records stay assigned
+  across restarts.
+- Internal bookkeeping rows are no longer counted as "records" in the
+  unassigned banner — the number you see is now only real history (the count
+  you see may drop after updating; nothing was lost).
+- Login-less stub journals (menu open/close, launcher crash) are no longer
+  ingested at all. They contain nothing but session chrome, so future stubs
+  will not feed the unassigned bucket in the first place.
 
 ### Upgrade notes
 
-- Update normally from any 2.x release. No settings, database or pairing
-  changes are required.
-- The one-time history sweep introduced in 2.1 also benefits: if your
-  machine has not finished it yet, it will complete several times faster.
+- Update normally from any 2.x release.
+- If the banner still shows unassigned records after updating, assign them
+  once — this time they will stay with your commander.

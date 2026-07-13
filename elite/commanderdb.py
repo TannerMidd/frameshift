@@ -127,6 +127,12 @@ DEFAULT_PROFILE_ADOPTABLE_TABLES = frozenset(
     }
 )
 
+# Per-journal-file processing markers. These record WHICH identity a file was
+# processed under and must never be re-owned: moving them with an explicit
+# assignment makes the next sweep forget owner-less files were already
+# imported and endlessly regenerate their rows under ``default``.
+PER_FILE_BOOKKEEPING_TABLES = frozenset({"imported_journals", "ledger_journal_files"})
+
 
 # Early development databases gained commander_id with ALTER TABLE. SQLite
 # cannot alter a primary key, so those databases still rejected the same
