@@ -2,4 +2,4 @@
 from the git tag (see .github/workflows/release.yml); the value committed here
 is the fallback for source runs."""
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"

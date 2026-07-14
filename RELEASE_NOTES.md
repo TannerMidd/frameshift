@@ -1,36 +1,35 @@
-## Frameshift v2.2.0 — build your own extensions
+## Frameshift v2.3.0 — the tactical status page
 
-### Extension builder (experimental)
+The flight panel's home page and rail got a full redesign — more readout,
+less furniture, same touch targets.
 
-Settings has a new card: **EXTENSION BUILDER**. Make Frameshift react to the
-game exactly the way you want — no code, no files, no manual.
+### Command header
 
-- **Pick a game event** from a plain-English list (hyperspace jump, bounty
-  awarded, mission completed, body scanned, cargo sold…) or type any journal
-  event name.
-- **Add conditions** with simple operators: *equals*, *is one of*,
-  *is at least*, *is at most*, *is present / absent*. `Reward is at least
-  100000` reads the way you'd say it.
-- **Choose what happens** — a cockpit alert (INFO / WARN / CRITICAL, with an
-  optional voice callout) or a suggested objective for Mission Control.
-  Write `{FieldName}` in the message and the live value drops in:
-  `Bounty {Reward} cr — {Target}`.
-- **Test before you save.** One button replays your rule against your own
-  last 1,000 journal events and shows exactly what would have fired, message
-  rendered. No guessing whether a condition is right.
-- **Templates** get you started in one tap: big-bounty callout, low fuel
-  after jump, mission payout tracker, first-discovery follow-up.
+The system readout is now a proper cockpit plate: your current system large
+and glowing, a dock-state chip, and — when you're following a plotted
+route — a segmented progress bar right in the header showing the next
+waypoint. On the right, ship telemetry: credits, rebuy, and legal state,
+with a new **coverage line** under the rebuy — `COVERS 21×` in green, amber
+when you're under two rebuys, red when you can't afford to lose the ship.
 
-Saved extensions activate immediately, appear in the pack list with edit and
-remove buttons, and are ordinary declarative packs on your own disk —
-reviewable, portable, and unable to execute code by design. The builder can
-never create or overwrite a process-adapter pack.
+### Readouts that advise, not just report
 
-### Also in this release
+- **Fuel** shows ≈how many jumps your tank holds at your recent burn rate,
+  and whether the star here (or the next one on your route) is scoopable.
+- **Cargo** shows free tonnage, or "hold empty — ready for loop cargo".
+- **Unbanked data** gets its own card: exploration value with body count,
+  bio samples with species count.
+- **Data at risk** is now a full-width hazard banner when your unsold data
+  is worth many rebuys, with a pointer to the nearest place to bank it.
+- The status strip shows your in-game destination with **jumps left**, and
+  a quiet footer reports link health and telemetry time.
 
-- The extensions and diagnostics readouts on the Settings page now load
-  independently, so the pack list no longer waits behind the (slower)
-  database health probe.
+### The rail
+
+Sharper and more legible: an accent header bar, the active page marked with
+hazard striping and a cut corner, and boxed utility buttons. Everything —
+rail, strip, page — follows your chosen color theme, and the ambient CRT
+effects remain opt-in in Settings.
 
 ### Upgrade notes
 
