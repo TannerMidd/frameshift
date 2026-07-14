@@ -4,6 +4,14 @@ Frameshift extensions are local folders under `data/extensions`. The folder
 name and manifest `id` must match. Declarative extensions need no install step,
 account or API key and cannot execute code.
 
+Since v2.2.0 you don't have to write manifests by hand: **⚙ Settings →
+Extension Builder** is a guided form that generates declarative packs —
+including a dry-run that replays your rules over your own recent journal
+history before saving. Builder-saved packs are ordinary manifests in this
+format (stamped `"created_with": "frameshift-builder"`), and any declarative
+pack can be opened back into the builder for editing or removed from the pack
+list. The builder cannot create, overwrite or delete process-adapter packs.
+
 ```json
 {
   "id": "example.hull-alerts",
