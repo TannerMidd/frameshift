@@ -184,7 +184,7 @@
 <nav id="fp-nav" aria-label="Flight panel pages">
   <div class="fp-nav-brand"><img src="icon.svg" alt="" width="42" height="42"></div>
   <div class="fp-nav-pages">
-    <button data-page="status" class="active" aria-current="page"><span class="fp-ni" aria-hidden="true">◈</span><span class="fp-nl">STATUS</span></button>
+    <button data-page="status" class="active"><span class="fp-ni" aria-hidden="true">◈</span><span class="fp-nl">STATUS</span></button>
     <button data-page="trade"><span class="fp-ni" aria-hidden="true">⇄</span><span class="fp-nl">TRADE</span></button>
     <button data-page="commodities"><span class="fp-ni" aria-hidden="true">▦</span><span class="fp-nl">MARKET</span></button>
     <button data-page="bio"><span class="fp-ni" aria-hidden="true">⬡</span><span class="fp-nl">EXPLORE</span></button>
@@ -795,7 +795,7 @@
           <input id="ep-quantity" type="number" min="1" max="99" value="1" inputmode="numeric">
         </label>
         <button type="submit" id="ep-pin" class="primary" title="Add or update this item in the wishlist">ADD TO WISHLIST</button>
-        <button type="button" id="ep-traders" class="copy" title="Find nearby raw, manufactured and encoded material traders">FIND TRADERS</button>
+        <button type="button" id="ep-traders" title="Find nearby raw, manufactured and encoded material traders">FIND TRADERS</button>
       </form>
       <div class="ep-picker-meta">
         <div class="dim" id="ep-match-count"></div>
@@ -1328,7 +1328,7 @@
         <div class="label">LOCAL VISIT HISTORY <span class="dim">change since your previous observation &middot; saved in this browser</span></div>
         <div class="galhistory-actions">
           <div class="value dim" id="galhistory-count"></div>
-          <button type="button" class="copy small danger" id="galhistory-clear" title="Delete old Galaxy observations and use the current system as a new baseline">CLEAR</button>
+          <button type="button" class="copy small" id="galhistory-clear" title="Delete old Galaxy observations and use the current system as a new baseline">CLEAR</button>
         </div>
       </div>
       <div id="galhistory-summary"></div>
