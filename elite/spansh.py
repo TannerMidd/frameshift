@@ -90,7 +90,11 @@ def _parse_dump_stations(system):
     for b in system.get("bodies") or []:
         for s in b.get("stations") or []:
             add(s, body=b.get("name"))
-    out.sort(key=lambda s: (s["dist_ls"] is None, s["dist_ls"] or 0))
+    # Real ports by arrival distance; fleet carriers sink to the bottom —
+    # they are transient and can outnumber the actual stations in a busy
+    # system, drowning the list a commander came to read.
+    out.sort(key=lambda s: ("carrier" in (s["type"] or "").lower(),
+                            s["dist_ls"] is None, s["dist_ls"] or 0))
     return out
 
 

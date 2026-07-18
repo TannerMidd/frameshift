@@ -36,8 +36,8 @@ function fmtCr(n) {
 function copyText(text, btn) {
   const done = () => {
     if (!btn) return;
-    btn.classList.add("done");
-    setTimeout(() => btn.classList.remove("done"), 900);
+    btn.classList.add("hb-good");
+    setTimeout(() => btn.classList.remove("hb-good"), 900);
   };
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(text).then(done);
@@ -60,7 +60,7 @@ function copyText(text, btn) {
 function initBusyButtonStates() {
   const completed = new WeakSet();
   const schedule = (button) => {
-    if (!button?.matches("button.primary, .ub-btn")) return;
+    if (!button?.matches("button.hb, .ub-btn")) return;
     completed.delete(button);
     requestAnimationFrame(() => {
       if (button.disabled && !completed.has(button)) {
@@ -307,7 +307,7 @@ async function renderPairedDevices(admin) {
       refreshSecurityPanel();
     });
     const revoke = document.createElement("button");
-    revoke.className = "copy danger";
+    revoke.className = "hb hb-utility hb-danger";
     revoke.textContent = "REVOKE";
     revoke.addEventListener("click", async () => {
       await fetch(`/api/security/devices/${encodeURIComponent(device.id)}`, { method: "DELETE" });
@@ -350,7 +350,7 @@ async function loadProfiles() {
         pick.appendChild(option);
       }
       const assign = document.createElement("button");
-      assign.className = "primary small";
+      assign.className = "hb hb-primary hb-sm";
       assign.textContent = "ASSIGN";
       assign.addEventListener("click", async () => {
         const target = named.find((p) => p.id === pick.value);
@@ -387,7 +387,7 @@ async function loadProfiles() {
       row.appendChild(main);
       if (!profile.active) {
         const activate = document.createElement("button");
-        activate.className = "copy";
+        activate.className = "hb hb-utility";
         activate.textContent = "ACTIVATE";
         activate.title = "Show this commander's data now. The journal switches it back automatically at your next login.";
         activate.addEventListener("click", async () => {
@@ -395,7 +395,7 @@ async function loadProfiles() {
           loadProfiles();
         });
         const remove = document.createElement("button");
-        remove.className = "copy danger";
+        remove.className = "hb hb-utility hb-danger";
         remove.textContent = "DELETE";
         remove.title = "Remove this profile and every local record it owns. In-game progress is never affected.";
         remove.addEventListener("click", async () => {
@@ -465,11 +465,11 @@ function renderExtensionRows(extensions) {
           : '<span class="good">DECLARATIVE · NO CODE EXECUTION</span>';
         const action = process
           ? (extension.approved
-            ? `<button type="button" class="copy danger" data-extension-action="revoke" data-extension-id="${esc(extension.id)}">REVOKE</button>`
-            : `<button type="button" class="copy" data-extension-action="approve" data-extension-id="${esc(extension.id)}">APPROVE CODE</button>`)
+            ? `<button type="button" class="hb hb-utility hb-danger" data-extension-action="revoke" data-extension-id="${esc(extension.id)}">REVOKE</button>`
+            : `<button type="button" class="hb hb-utility" data-extension-action="approve" data-extension-id="${esc(extension.id)}">APPROVE CODE</button>`)
           : `<span class="extension-tools">` +
-            `<button type="button" class="copy" data-extension-action="edit" data-extension-id="${esc(extension.id)}" title="Open in the extension builder">✎ EDIT</button>` +
-            `<button type="button" class="copy danger" data-extension-action="delete" data-extension-id="${esc(extension.id)}" title="Remove this pack">✕</button></span>`;
+            `<button type="button" class="hb hb-utility" data-extension-action="edit" data-extension-id="${esc(extension.id)}" title="Open in the extension builder">✎ EDIT</button>` +
+            `<button type="button" class="hb hb-utility hb-danger" data-extension-action="delete" data-extension-id="${esc(extension.id)}" title="Remove this pack">✕</button></span>`;
         return `<div class="extension-row"><div><b>${esc(extension.name || extension.id)}</b>` +
           `<span class="dim">${esc(extension.id)} · ${esc(extension.version || "0")} · ${esc(permissionText)}</span>` +
           `<span>${approval}${process && extension.fingerprint ? ` · fingerprint ${esc(extension.fingerprint)}` : ""}</span></div>${action}</div>`;
@@ -643,7 +643,7 @@ function xbRenderRules() {
     block.innerHTML =
       `<div class="xb-rule-head"><span class="xb-rule-n">RULE ${ri + 1}</span>` +
       (xbModel.rules.length > 1
-        ? `<button type="button" class="copy small" data-xb="rule-remove" data-ri="${ri}">✕ REMOVE</button>` : "") +
+        ? `<button type="button" class="hb hb-utility hb-sm" data-xb="rule-remove" data-ri="${ri}">✕ REMOVE</button>` : "") +
       `</div>` +
       `<div class="xb-row"><span class="xb-kw">WHEN</span>` +
       `<select data-xb="event" data-ri="${ri}">` +
@@ -662,11 +662,11 @@ function xbRenderRules() {
         `</select>` +
         (["exists", "absent"].includes(c.op) ? "" :
           `<input type="text" data-xb="cond-value" data-ri="${ri}" data-ci="${ci}" placeholder="Value" value="${esc(c.value || "")}">`) +
-        `<button type="button" class="copy small" data-xb="cond-remove" data-ri="${ri}" data-ci="${ci}" title="Remove condition">✕</button>` +
+        `<button type="button" class="hb hb-utility hb-sm" data-xb="cond-remove" data-ri="${ri}" data-ci="${ci}" title="Remove condition">✕</button>` +
         `</div>`).join("") +
       `</div>` +
       `<datalist id="xb-fields-${ri}">${fields.map((f) => `<option value="${esc(f)}">`).join("")}</datalist>` +
-      `<button type="button" class="copy small" data-xb="cond-add" data-ri="${ri}">＋ CONDITION</button>` +
+      `<button type="button" class="hb hb-utility hb-sm" data-xb="cond-add" data-ri="${ri}">＋ CONDITION</button>` +
       `<div class="xb-row"><span class="xb-kw">THEN</span>` +
       `<select data-xb="action-type" data-ri="${ri}">` +
       `<option value="alert"${alert ? " selected" : ""}>Show a cockpit alert</option>` +
@@ -1004,7 +1004,11 @@ function setPlotBusy(on) {
     const btn = $(id);
     if (!btn) continue;
     btn.textContent = on ? "CANCEL" : "PLOT";
-    btn.classList.toggle("danger", on);
+    btn.classList.toggle("hb-danger", on);
+    // The swap keeps aria-busy: the control stays live (it now cancels), but
+    // assistive tech should still hear that the plot sequence is running.
+    if (on) btn.setAttribute("aria-busy", "true");
+    else btn.removeAttribute("aria-busy");
   }
 }
 
@@ -1119,7 +1123,6 @@ function setVoice(on, announce) {
   const btn = $("fp-voice");
   if (btn) {
     btn.setAttribute("aria-pressed", on ? "true" : "false");
-    btn.classList.toggle("on", on);
     btn.textContent = on ? "🔊 VOICE" : "🔈 VOICE";
   }
   if (on && announce) speak("Voice callouts on.", true);
@@ -1608,7 +1611,7 @@ function renderPanel() {
 
 function plotButton(system) {
   const btn = document.createElement("button");
-  btn.className = "plotbtn";
+  btn.className = "hb hb-utility hb-icon hb-sm";
   btn.type = "button";
   btn.title = "Plot route in game to " + system;
   btn.setAttribute("aria-label", btn.title);
@@ -1619,7 +1622,7 @@ function plotButton(system) {
 
 function copySystemButton(system) {
   const btn = document.createElement("button");
-  btn.className = "copy";
+  btn.className = "hb hb-utility hb-icon hb-sm";
   btn.type = "button";
   btn.title = "Copy system name";
   btn.setAttribute("aria-label", btn.title);
@@ -1815,7 +1818,7 @@ function renderRouteProgress() {
   if (target) {
     main.insertBefore(plotButton(target.system), main.querySelector(".rp-next").nextSibling);
     const skip = document.createElement("button");
-    skip.className = "plotbtn rp-skip";
+    skip.className = "hb hb-utility rp-skip";
     skip.textContent = "✓ done";
     skip.title = "Mark this waypoint reached";
     skip.addEventListener("click", () => advanceRoute(1));
@@ -1823,14 +1826,14 @@ function renderRouteProgress() {
   }
   if (done > 0 && !complete) {
     const back = document.createElement("button");
-    back.className = "plotbtn rp-back";
+    back.className = "hb hb-utility rp-back";
     back.textContent = "↩";
     back.title = "Step back one waypoint";
     back.addEventListener("click", () => advanceRoute(-1));
     main.appendChild(back);
   }
   const stop = document.createElement("button");
-  stop.className = "copy danger rp-stop";
+  stop.className = "hb hb-utility hb-icon hb-sm hb-danger rp-stop";
   stop.textContent = "✕";
   stop.title = "Stop tracking this route";
   stop.setAttribute("aria-label", "Stop tracking route");
@@ -1859,7 +1862,7 @@ function renderPanelRouteLine() {
 /* A small "track this route" button for a list of waypoint systems. */
 function trackButton(kind, label, waypointsFn) {
   const btn = document.createElement("button");
-  btn.className = "plotbtn trackbtn";
+  btn.className = "hb hb-utility trackbtn";
   btn.type = "button";
   btn.textContent = "◈ TRACK";
   btn.title = "Follow this route step by step (marks your progress as you jump)";
@@ -2064,6 +2067,11 @@ function renderMissions(missions) {
   $("missions-empty").classList.toggle("hidden", missions.length > 0);
   $("missions-count").textContent = missions.length ? missions.length + " active" : "";
 
+  // Soonest deadline first — the card's own legend says "red = expiring
+  // soon", so that's what belongs on top (journal order buries it).
+  missions = [...missions].sort(
+    (a, b) => (a.expiry_ts || Infinity) - (b.expiry_ts || Infinity));
+
   const cargo = {};
   for (const c of state.cargo_inventory || []) cargo[(c.symbol || "").toLowerCase()] = c.count;
   // Re-render on mission/cargo change, and once a minute so countdowns tick.
@@ -2105,8 +2113,9 @@ function renderMissions(missions) {
       (rem != null ? `· <span class="${expired ? "warn" : soon ? "soon" : "dim"}">${expired ? "EXPIRED" : "expires " + fmtDuration(rem)}</span>` : "") +
       `</div>`;
     if (m.dest_system) {
-      const top = div.querySelector(".mission-top");
-      top.insertBefore(plotButton(m.dest_system), top.querySelector(".mission-reward"));
+      // After the auto-margined reward, so the ◎ joins the right-edge cluster
+      // instead of floating mid-row wherever the mission name ends.
+      div.querySelector(".mission-top").appendChild(plotButton(m.dest_system));
     }
     list.appendChild(div);
   }
@@ -2158,7 +2167,7 @@ function stationRow(s) {
   const line = div.querySelector(".sst-line");
   if (s.local_market) {
     const btn = document.createElement("button");
-    btn.className = "copy";
+    btn.className = "hb hb-utility";
     btn.textContent = "▤ MARKET";
     btn.title = "This station's commodity market from your local database (EDDN-fresh)";
     btn.addEventListener("click", () => toggleStationMarket(div, s.market_id, btn));
@@ -2414,12 +2423,12 @@ function renderEngPlans(wishlist) {
     const actions = card.querySelector(".ep-wish-actions");
     const edit = document.createElement("button");
     edit.type = "button";
-    edit.className = "copy";
+    edit.className = "hb hb-utility";
     edit.textContent = "EDIT";
     edit.addEventListener("click", () => editEngineeringItem(item));
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.className = "copy danger ep-remove";
+    remove.className = "hb hb-utility hb-danger ep-remove";
     remove.textContent = "REMOVE";
     remove.addEventListener("click", () => pinBlueprint({ id: item.id, action: "unpin" }));
     actions.append(edit, remove);
@@ -3279,7 +3288,7 @@ function renderCommunityGoals(gal) {
       (g.contribution != null ? ` · your contribution ${fmtNum(g.contribution)}` : "") +
       (g.tier ? ` · tier ${esc(String(g.tier))} reached` : "") +
       (g.contributors ? ` · ${fmtNum(g.contributors)} commanders` : "") + `</div>`;
-    if (g.system) div.appendChild(plotButton(g.system));
+    if (g.system) div.querySelector(".fact-top").appendChild(plotButton(g.system));
     list.appendChild(div);
   }
 }
@@ -3326,7 +3335,7 @@ function renderBanner() {
     if (!banner.querySelector(".banner-settings-btn")) {
       banner.textContent = "Elite Dangerous journal folder not found — if the game is installed, point Frameshift at it: ";
       const btn = document.createElement("button");
-      btn.className = "copy banner-settings-btn";
+      btn.className = "hb hb-utility banner-settings-btn";
       btn.textContent = "OPEN SETTINGS";
       btn.addEventListener("click", () => {
         if (document.body.classList.contains("panel-mode")) setPanelPage("database");
@@ -3674,7 +3683,7 @@ function renderJumps() {
       `<span class="dist">${j.dist != null ? j.dist.toFixed(1) + " ly" : ""}</span>` +
       `<span class="when">${when}</span>`;
     const btn = document.createElement("button");
-    btn.className = "copy";
+    btn.className = "hb hb-utility hb-icon hb-sm";
     btn.title = "Copy system name";
     btn.textContent = "⧉";
     btn.addEventListener("click", () => copyText(j.system, btn));
@@ -4039,7 +4048,7 @@ function renderWatches(watches) {
     chip.className = "watch-chip";
     chip.append(`👁 ${w.label} `);
     const x = document.createElement("button");
-    x.className = "copy";
+    x.className = "hb hb-utility hb-icon hb-sm";
     x.textContent = "×";
     x.title = "Stop watching";
     x.addEventListener("click", async () => {
@@ -4077,7 +4086,7 @@ function renderAlerts(alerts) {
     row.appendChild(message);
     if (a.market_id != null) {
       const recover = document.createElement("button");
-      recover.className = "plotbtn alert-recover";
+      recover.className = "hb hb-utility alert-recover";
       recover.textContent = "RECOVER CARGO";
       recover.title = "Use the cargo currently aboard to find a different buyer, excluding the degraded market";
       recover.addEventListener("click", () => recoverCargo(a.market_id, recover));
@@ -4086,7 +4095,7 @@ function renderAlerts(alerts) {
     strip.appendChild(row);
   }
   const dismiss = document.createElement("button");
-  dismiss.className = "copy";
+  dismiss.className = "hb hb-ghost hb-sm";
   dismiss.textContent = "dismiss";
   dismiss.addEventListener("click", async () => {
     await commanderFetch("/api/alerts/clear", { method: "POST" });
@@ -4130,7 +4139,7 @@ function renderLoops(loops) {
     const btnA = plotButton(l.a.system);
     const btnB = plotButton(l.b.system);
     const watchBtn = document.createElement("button");
-    watchBtn.className = "plotbtn";
+    watchBtn.className = "hb hb-utility";
     watchBtn.textContent = "WATCH";
     watchBtn.title = "Alert me when this loop's prices/stock degrade (live EDDN)";
     watchBtn.addEventListener("click", () => watchLoop(l, watchBtn));
@@ -4388,6 +4397,7 @@ function sortableHeaders(tableId, onSort) {
 
 let csResults = null;   // { results, mode }
 let csSort = null;      // { key, dir }  (dir: 1 ascending, -1 descending)
+let csSortTouched = false;  // a user-chosen sort survives new searches
 
 // A null price dir resolves per mode: buying wants cheap first, selling rich first.
 const CS_SORT_COLUMNS = {
@@ -4433,6 +4443,7 @@ function renderCommodityRows() {
 
 function sortCommodityTable(key) {
   if (!CS_SORT_COLUMNS[key] || !csResults) return;
+  csSortTouched = true;
   csSort = bumpSort(csSort, key, CS_SORT_COLUMNS, csResults.mode === "buy" ? 1 : -1);
   renderCommodityRows();
 }
@@ -4460,6 +4471,9 @@ async function searchCommodity(ev) {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || "Search failed");
     csResults = { results: data.results || [], mode };
+    // Make the default order visible in the headers: buying wants the
+    // cheapest first, selling the richest. A header click overrides it.
+    if (!csSortTouched) csSort = { key: "price", dir: mode === "buy" ? 1 : -1 };
     renderCommodityRows();
     table.classList.toggle("hidden", !csResults.results.length);
     const where = near ? ` of ${near}` : "";
@@ -4507,7 +4521,7 @@ function renderMiningRows() {
       `<td class="num">${fmtNum(r.demand)}</td>`;
     const td = document.createElement("td");
     const hs = document.createElement("button");
-    hs.className = "plotbtn";
+    hs.className = "hb hb-utility";
     hs.type = "button";
     hs.textContent = "◇ hotspots";
     hs.title = "Find the nearest ring hotspots for " + r.name;
@@ -4547,6 +4561,8 @@ async function searchMining(ev) {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || "Search failed");
     mnResults = data.results || [];
+    // Show the default best-price-first order in the headers.
+    if (!mnSort) mnSort = { key: "sell", dir: -1 };
     renderMiningRows();
     table.classList.toggle("hidden", !mnResults.length);
     status.textContent = mnResults.length
@@ -4713,7 +4729,7 @@ async function searchExobio(ev) {
         `<div class="commodities">${bodies}</div>`;
       const line = div.querySelector(".route-line");
       const copyBtn = document.createElement("button");
-      copyBtn.className = "copy"; copyBtn.textContent = "⧉"; copyBtn.title = "Copy system name";
+      copyBtn.className = "hb hb-utility hb-icon hb-sm"; copyBtn.textContent = "⧉"; copyBtn.title = "Copy system name";
       copyBtn.addEventListener("click", () => copyText(s.system, copyBtn));
       line.insertBefore(copyBtn, line.querySelector(".profit"));
       line.insertBefore(plotButton(s.system), line.querySelector(".profit"));
@@ -4776,7 +4792,7 @@ async function planRiches(ev) {
         `<div class="commodities">${bodies}</div>`;
       const line = div.querySelector(".route-line");
       const copyBtn = document.createElement("button");
-      copyBtn.className = "copy"; copyBtn.textContent = "⧉"; copyBtn.title = "Copy system name";
+      copyBtn.className = "hb hb-utility hb-icon hb-sm"; copyBtn.textContent = "⧉"; copyBtn.title = "Copy system name";
       copyBtn.addEventListener("click", () => copyText(s.system, copyBtn));
       line.insertBefore(copyBtn, line.querySelector(".profit"));
       line.insertBefore(plotButton(s.system), line.querySelector(".profit"));
@@ -4839,7 +4855,7 @@ async function planNeutron(ev) {
         `<td class="num">${w.jumps ?? ""}</td>`;
       const td = document.createElement("td");
       const copyBtn = document.createElement("button");
-      copyBtn.className = "copy"; copyBtn.textContent = "⧉"; copyBtn.title = "Copy system name";
+      copyBtn.className = "hb hb-utility hb-icon hb-sm"; copyBtn.textContent = "⧉"; copyBtn.title = "Copy system name";
       copyBtn.addEventListener("click", () => copyText(w.system, copyBtn));
       td.appendChild(copyBtn);
       td.appendChild(plotButton(w.system));
@@ -4912,6 +4928,8 @@ async function searchStations(ev) {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || "Search failed");
     osResults = data.results || [];
+    // Show the default nearest-first order in the headers.
+    if (!osSort) osSort = { key: "jump", dir: 1 };
     status.textContent = osResults.length
       ? `${osResults.length} station(s) with "${$("os-query").value.trim()}" nearest ${near || "you"}:`
       : "Nothing found — check the spelling (e.g. '6A Fuel Scoop', 'Python Mk II').";
@@ -4979,7 +4997,7 @@ function renderColonisation() {
         : `<div class="commodities">All resources delivered.</div>`);
     if (remaining.length) {
       const btn = document.createElement("button");
-      btn.className = "plotbtn";
+      btn.className = "hb hb-utility";
       btn.textContent = "FIND SOURCES";
       btn.title = "Cheapest nearby stations selling what's still needed";
       btn.addEventListener("click", async () => {
@@ -5869,7 +5887,7 @@ function buildTtsSetting() {
         "The voice is shared by every device; this on/off switch is per device.</div>";
       row.append(cb, sw, txt);
       const test = document.createElement("button");
-      test.className = "primary small";
+      test.className = "hb hb-primary hb-sm";
       test.textContent = "TEST";
       test.title = "Play a sample callout with the neural voice (even while the switch is off)";
       test.addEventListener("click", () =>
@@ -5894,7 +5912,7 @@ function buildTtsSetting() {
       (st && st.supported === false ? " Not available on this platform." : "") + "</div>";
     row.appendChild(txt);
     const btn = document.createElement("button");
-    btn.className = "primary small";
+    btn.className = "hb hb-primary hb-sm";
     btn.textContent = "DOWNLOAD VOICE";
     btn.disabled = !!(st && st.supported === false);
     btn.addEventListener("click", async () => {
@@ -5943,7 +5961,7 @@ function renderSettings(values, info) {
     const wrap = document.createElement("div");
     wrap.className = "update-check-row";
     const btn = document.createElement("button");
-    btn.className = "primary small";
+    btn.className = "hb hb-primary hb-sm";
     btn.textContent = "Check for updates now";
     const stat = document.createElement("span");
     stat.className = "dim";
@@ -5976,7 +5994,7 @@ function buildJournalDirSetting(values) {
   input.value = values.journal_dir || "";
   input.setAttribute("spellcheck", "false");
   const save = document.createElement("button");
-  save.className = "primary small";
+  save.className = "hb hb-primary hb-sm";
   save.textContent = "SAVE";
   const status = document.createElement("div");
   status.className = "dim journal-dir-status";
@@ -6179,7 +6197,7 @@ function opsTaskMarkup(task, index, selected, plan, nodeById) {
   const dependencyLine = dependencies.length
     ? `<div class="ops-dependencies"><b>Requires:</b> ${dependencies.map((item) => esc(item.title)).join(" → ")}</div>` : "";
   const plot = destination.system
-    ? `<button class="copy ops-task-action" type="button" data-ops-plot="${esc(destination.system)}">PLOT ${esc(destination.system)}</button>` : "";
+    ? `<button class="hb hb-utility ops-task-action" type="button" data-ops-plot="${esc(destination.system)}">PLOT ${esc(destination.system)}</button>` : "";
   return `<article class="ops-task${selected ? "" : " alternative"}">` +
     `<div class="ops-task-number">${selected ? index + 1 : `A${index + 1}`}</div>` +
     `<div><div class="ops-task-title">${esc(task.title || "Untitled task")}</div>` +
@@ -6264,8 +6282,8 @@ function renderOpsObjectives() {
       `<div class="ops-record-meta"><span>PRIORITY ${Number(objective.priority || 0)}</span>` +
       facts.map((fact) => `<span>${esc(fact)}</span>`).join("") + `</div></div>` +
       `<div class="ops-record-controls"><select data-objective-status="${esc(objective.id)}" aria-label="Status for ${esc(objective.title)}">${options}</select>` +
-      `<button class="copy" type="button" data-objective-edit="${esc(objective.id)}">EDIT</button>` +
-      `<button class="copy danger" type="button" data-objective-delete="${esc(objective.id)}">DELETE</button></div></article>`;
+      `<button class="hb hb-utility" type="button" data-objective-edit="${esc(objective.id)}">EDIT</button>` +
+      `<button class="hb hb-utility hb-danger" type="button" data-objective-delete="${esc(objective.id)}">DELETE</button></div></article>`;
   }).join("");
 }
 
@@ -6460,7 +6478,7 @@ function opsBoardRecordMarkup(record, kind) {
   return `<article class="ops-record ${statusClass}"><div><div class="ops-record-title">${esc(title)}</div>` +
     `<div class="ops-record-meta">${facts.filter(Boolean).map((fact) => `<span>${esc(fact)}</span>`).join("")}</div></div>` +
     `<div class="ops-record-controls">${selector}` +
-    `<button class="copy danger" type="button" data-op-delete data-kind="${kind}" data-id="${esc(record.id)}">REMOVE</button>` +
+    `<button class="hb hb-utility hb-danger" type="button" data-op-delete data-kind="${kind}" data-id="${esc(record.id)}">REMOVE</button>` +
     `</div></article>`;
 }
 
@@ -6752,7 +6770,7 @@ function setSpecialistWorkflow(name) {
   localStorage.setItem("specialistWorkflow", name);
   document.querySelectorAll(".sp-switcher [data-specialist]").forEach((button) => {
     const active = button.dataset.specialist === name;
-    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
     button.setAttribute("aria-selected", String(active));
     button.tabIndex = active ? 0 : -1;
   });
@@ -7045,7 +7063,7 @@ function carrierAddRouteLeg(leg = {}) {
     `<label>System<input class="sp-leg-system" type="text" maxlength="160" value="${esc(leg.system || "")}" placeholder="Destination" required></label>` +
     `<label>Distance (ly)<input class="sp-leg-distance" type="number" min="0.01" step="0.01" value="${leg.distance_ly ?? ""}" placeholder="Exact leg" required></label>` +
     `<label>Tritium (t)<input class="sp-leg-tritium" type="number" min="0" step="0.1" value="${leg.tritium_t ?? ""}" placeholder="Optional"></label>` +
-    `<button class="copy sp-remove-leg" type="button" title="Remove this route leg" aria-label="Remove this route leg">×</button>`;
+    `<button class="hb hb-utility hb-icon hb-sm sp-remove-leg" type="button" title="Remove this route leg" aria-label="Remove this route leg">×</button>`;
   row.querySelector(".sp-remove-leg").addEventListener("click", () => {
     row.remove();
     if (!$("sp-carrier-legs").children.length) carrierAddRouteLeg();
@@ -7254,7 +7272,7 @@ function renderExobiologySpecialist() {
     const bearing = pin.bearing_deg == null ? "bearing unknown" : `${Math.round(pin.bearing_deg)}° · ${specialistNumber(pin.distance_m, " m")}`;
     const relative = pin.relative_bearing_deg == null ? "" : ` · ${pin.relative_bearing_deg < 0 ? "left" : "right"} ${Math.abs(Math.round(pin.relative_bearing_deg))}°`;
     const remove = pin.source === "manual"
-      ? `<button type="button" class="copy sp-pin-delete" data-pin-id="${esc(pin.id)}">REMOVE</button>` : "";
+      ? `<button type="button" class="hb hb-utility sp-pin-delete" data-pin-id="${esc(pin.id)}">REMOVE</button>` : "";
     return `<div class="sp-pin-row"><i class="${pin.kind === "organic_sample" ? "sample" : pin.source === "manual" ? "manual" : "journal"}"></i>` +
       `<div><b>${esc(pin.label || specialistHumanName(pin.kind))}</b><span>${esc(bearing + relative)} · ${esc(pin.source || "journal")}</span></div>${remove}</div>`;
   }).join("") : '<div class="dim empty">No pins on this body yet.</div>';
@@ -7528,8 +7546,8 @@ function paneEnter(el) {
 }
 
 function activateTab(name, enter = true) {
-  document.querySelectorAll("#tabs .tab").forEach((b) =>
-    b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll("#tabs [data-tab]").forEach((b) =>
+    b.setAttribute("aria-pressed", String(b.dataset.tab === name)));
   document.querySelectorAll(".tabpane").forEach((p) => {
     const show = p.id === "tab-" + name;
     const wasHidden = p.classList.contains("hidden");
@@ -7547,7 +7565,7 @@ function activateTab(name, enter = true) {
 }
 
 function initTabs() {
-  document.querySelectorAll("#tabs .tab").forEach((b) =>
+  document.querySelectorAll("#tabs [data-tab]").forEach((b) =>
     b.addEventListener("click", () => activateTab(b.dataset.tab)));
   const saved = localStorage.getItem("activeTab");
   if (saved && document.getElementById("tab-" + saved)) activateTab(saved);
@@ -7710,7 +7728,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.addEventListener("fullscreenchange", () => {
     const on = !!document.fullscreenElement;
     const btn = $("fp-full");
-    btn.classList.toggle("on", on);
     btn.setAttribute("aria-pressed", String(on));
     btn.title = on ? "Leave fullscreen" : "Expand to fullscreen";
   });

@@ -12,6 +12,8 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <script src="panel-bootstrap.js"></script>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="holo-buttons.css">
+<script src="hb.js" defer></script>
 </head>
 <body>
 
@@ -21,7 +23,7 @@
     <div class="label">SECURE COCKPIT LINK</div>
     <h1 id="pairing-title">Pairing this device…</h1>
     <p id="pairing-message" class="dim">Exchanging the one-time link. No account or password is required.</p>
-    <button id="pairing-retry" class="primary hidden">TRY AGAIN</button>
+    <button id="pairing-retry" class="hb hb-primary hidden">TRY AGAIN</button>
   </div>
 </div>
 
@@ -30,7 +32,7 @@
   <div class="pilot">
     <span id="commander">—</span>
     <span class="dim" id="ship">—</span>
-    <button id="panel-toggle" class="copy" title="Switch to the touch-friendly tablet flight panel">◈ PANEL</button>
+    <button id="panel-toggle" class="hb hb-utility" title="Switch to the touch-friendly tablet flight panel">◈ PANEL</button>
   </div>
 </header>
 
@@ -45,7 +47,7 @@
   <div class="notes-box">
     <div class="notes-head">
       <b id="notes-title">Release notes</b>
-      <button id="notes-close" class="copy" title="Close" aria-label="Close">✕</button>
+      <button id="notes-close" class="hb hb-utility hb-icon hb-sm" title="Close" aria-label="Close">✕</button>
     </div>
     <div id="notes-body" class="notes-body"></div>
     <div class="notes-foot">
@@ -89,7 +91,7 @@
       <span class="go-sub" id="launch-status">Game offline — showing your last session's data</span>
     </div>
   </div>
-  <button id="launch-game" class="go-launch" title="Starts Elite Dangerous on the PC running Frameshift — works from a tablet too">
+  <button id="launch-game" class="hb hb-primary hb-lg go-launch" title="Starts Elite Dangerous on the PC running Frameshift — works from a tablet too">
     <span class="go-launch-label" id="launch-label">▲ LAUNCH ELITE DANGEROUS</span>
   </button>
   <div class="go-seq" aria-hidden="true"><div></div></div>
@@ -132,11 +134,11 @@
     <div class="fp-main">
       <form id="fp-plot-form" class="fp-plotrow">
         <input type="text" id="fp-plot-input" placeholder="PLOT ROUTE TO SYSTEM…" autocomplete="off">
-        <button type="submit" id="fp-plot-btn" class="fp-btn">◎ PLOT</button>
+        <button type="submit" id="fp-plot-btn" class="hb hb-primary hb-lg">◎ PLOT</button>
       </form>
       <div id="fp-plot-status" class="fp-sub fp-status"></div>
 
-      <button id="fp-bestloop" class="fp-btn fp-bestloop-btn">◈ BEST LOOP FROM HERE</button>
+      <button id="fp-bestloop" class="hb hb-lg fp-bestloop-btn">◈ BEST LOOP FROM HERE</button>
       <div id="fp-loop-status" class="fp-sub fp-status"></div>
       <div id="fp-loop-results" class="fp-loops"></div>
 
@@ -198,9 +200,9 @@
     <button data-page="database"><span class="fp-ni" aria-hidden="true">⚙&#xFE0E;</span><span class="fp-nl">SETTINGS</span></button>
   </div>
   <div class="fp-nav-foot">
-    <button id="fp-voice" class="fp-railbtn" aria-pressed="false" title="Speak callouts (fuel scooping, low fuel, interdiction, hull damage, first discovery, waypoints)">🔊 VOICE</button>
-    <button id="fp-full" class="fp-railbtn" aria-pressed="false" title="Expand to fullscreen">⛶ FULL</button>
-    <button id="panel-exit" class="fp-railbtn" title="Switch to the desktop layout">✕ EXIT</button>
+    <button id="fp-voice" class="hb hb-utility" aria-pressed="false" title="Speak callouts (fuel scooping, low fuel, interdiction, hull damage, first discovery, waypoints)">🔊 VOICE</button>
+    <button id="fp-full" class="hb hb-utility" aria-pressed="false" title="Expand to fullscreen">⛶ FULL</button>
+    <button id="panel-exit" class="hb hb-utility" title="Switch to the desktop layout">✕ EXIT</button>
   </div>
 </nav>
 
@@ -220,16 +222,16 @@
       <div class="label">CURRENT SYSTEM</div>
       <div class="system-row">
         <h1 id="system">—</h1>
-        <button class="copy" data-copy-target="system" title="Copy system name" aria-label="Copy system name">⧉</button>
+        <button class="hb hb-utility hb-icon hb-sm" data-copy-target="system" title="Copy system name" aria-label="Copy system name">⧉</button>
       </div>
       <div class="station-row">
         <span id="station-status" class="dim">—</span>
-        <button class="copy hidden" id="station-copy" title="Copy station name" aria-label="Copy station name">⧉</button>
+        <button class="hb hb-utility hb-icon hb-sm hidden" id="station-copy" title="Copy station name" aria-label="Copy station name">⧉</button>
       </div>
       <div class="dest-row dim" id="destination-row"></div>
       <form id="plot-form" class="plot-form">
         <input type="text" id="plot-input" placeholder="Plot route to system…" autocomplete="off">
-        <button type="submit" id="plot-btn" class="primary small">PLOT</button>
+        <button type="submit" id="plot-btn" class="hb hb-primary hb-sm">PLOT</button>
       </form>
       <div id="plot-status" class="dim"></div>
     </div>
@@ -242,19 +244,19 @@
     </div>
   </section>
 
-  <nav class="tabs" id="tabs">
-    <button class="tab active" data-tab="trade">TRADE ROUTES</button>
-    <button class="tab" data-tab="commodities">COMMODITIES</button>
-    <button class="tab" data-tab="bio">EXPLORE</button>
-    <button class="tab" data-tab="guides">GUIDES</button>
-    <button class="tab" data-tab="analytics">ANALYTICS</button>
-    <button class="tab" data-tab="engineering">ENGINEERING</button>
-    <button class="tab" data-tab="galaxy">GALAXY</button>
-    <button class="tab" data-tab="ops">OPS</button>
-    <button class="tab" data-tab="specialists">SPECIALISTS</button>
-    <button class="tab" data-tab="local">LOCAL</button>
-    <button class="tab" data-tab="database">⚙&#xFE0E; SETTINGS</button>
-    <button class="tab-arrange" id="arrange-btn" title="Customize this page: drag cards to reorder, ⊘ hides cards you don't use. Saved on this device." aria-pressed="false">⇅ ARRANGE</button>
+  <nav class="tabs hb-group" id="tabs">
+    <button class="hb hb-sm" aria-pressed="true" data-tab="trade">TRADE ROUTES</button>
+    <button class="hb hb-sm" aria-pressed="false" data-tab="commodities">COMMODITIES</button>
+    <button class="hb hb-sm" aria-pressed="false" data-tab="bio">EXPLORE</button>
+    <button class="hb hb-sm" aria-pressed="false" data-tab="guides">GUIDES</button>
+    <button class="hb hb-sm" aria-pressed="false" data-tab="analytics">ANALYTICS</button>
+    <button class="hb hb-sm" aria-pressed="false" data-tab="engineering">ENGINEERING</button>
+    <button class="hb hb-sm" aria-pressed="false" data-tab="galaxy">GALAXY</button>
+    <button class="hb hb-sm" aria-pressed="false" data-tab="ops">OPS</button>
+    <button class="hb hb-sm" aria-pressed="false" data-tab="specialists">SPECIALISTS</button>
+    <button class="hb hb-sm" aria-pressed="false" data-tab="local">LOCAL</button>
+    <button class="hb hb-sm" aria-pressed="false" data-tab="database">⚙&#xFE0E; SETTINGS</button>
+    <button class="hb hb-utility tab-arrange" id="arrange-btn" title="Customize this page: drag cards to reorder, ⊘ hides cards you don't use. Saved on this device." aria-pressed="false">⇅ ARRANGE</button>
   </nav>
 
   <div class="tabpane" id="tab-trade">
@@ -281,7 +283,7 @@
         <label>Max star dist (ls) <input type="number" id="rf-lsdist" min="1" value="1000"></label>
         <label>Price age (days) <input type="number" id="rf-age" min="1" value="30"></label>
         <label class="check"><input type="checkbox" id="rf-largepad"> Large pad</label>
-        <button type="submit" id="rf-go" class="primary">FIND ROUTES</button>
+        <button type="submit" id="rf-go" class="hb hb-primary">FIND ROUTES</button>
       </form>
       <div id="route-status" class="dim"></div>
       <div id="watch-list"></div>
@@ -290,30 +292,6 @@
   </div>
 
   <div class="tabpane hidden" id="tab-commodities">
-    <section class="card" id="mining-card" data-arr="mining">
-      <div class="label">MINING <span class="dim">what's worth mining near you now · best sell price from live data · tap ◇ for nearest hotspots</span></div>
-      <form id="mining-form" class="route-form">
-        <label>Radius (ly) <input type="number" id="mn-radius" min="1" value="50"></label>
-        <label>Min price (cr) <input type="number" id="mn-minprice" min="0" value="50000" title="Hide minerals selling below this"></label>
-        <label>Price age (days) <input type="number" id="mn-age" min="1" value="30"></label>
-        <label title="Search around another system instead — your carrier's destination, tomorrow's expedition stop…">Near <input type="text" id="mn-near" placeholder="current system" autocomplete="off"></label>
-        <label class="check"><input type="checkbox" id="mn-largepad"> Large pad</label>
-        <button type="submit" id="mn-go" class="primary">FIND</button>
-      </form>
-      <div id="mining-status" class="dim"></div>
-      <div class="table-wrap">
-        <table id="mining-table" class="hidden">
-          <thead>
-            <tr>
-              <th class="sortable" data-sort="mineral">Mineral</th><th class="sortable" data-sort="method">Method</th><th class="num sortable" data-sort="sell">Sell</th>
-              <th class="sortable" data-sort="station">Best buyer</th><th class="num sortable" data-sort="jump">Jump</th><th class="num sortable" data-sort="demand">Demand</th><th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
     <section class="card" data-arr="comsearch">
       <div class="label">COMMODITY SEARCH <span class="dim">local database · where to buy or sell near you</span></div>
       <form id="cs-form" class="route-form">
@@ -331,7 +309,7 @@
         <label>Min units <input type="number" id="cs-min" min="1" value="100"></label>
         <label title="Search around another system instead — your carrier's destination, tomorrow's expedition stop…">Near <input type="text" id="cs-near" placeholder="current system" autocomplete="off"></label>
         <label class="check"><input type="checkbox" id="cs-largepad"> Large pad</label>
-        <button type="submit" id="cs-go" class="primary">SEARCH</button>
+        <button type="submit" id="cs-go" class="hb hb-primary">SEARCH</button>
       </form>
       <div id="cs-status" class="dim"></div>
       <div class="table-wrap">
@@ -348,6 +326,30 @@
         </table>
       </div>
     </section>
+    <section class="card" id="mining-card" data-arr="mining">
+      <div class="label">MINING <span class="dim">what's worth mining near you now · best sell price from live data · tap ◇ for nearest hotspots</span></div>
+      <form id="mining-form" class="route-form">
+        <label>Radius (ly) <input type="number" id="mn-radius" min="1" value="50"></label>
+        <label>Min price (cr) <input type="number" id="mn-minprice" min="0" value="50000" title="Hide minerals selling below this"></label>
+        <label>Price age (days) <input type="number" id="mn-age" min="1" value="30"></label>
+        <label title="Search around another system instead — your carrier's destination, tomorrow's expedition stop…">Near <input type="text" id="mn-near" placeholder="current system" autocomplete="off"></label>
+        <label class="check"><input type="checkbox" id="mn-largepad"> Large pad</label>
+        <button type="submit" id="mn-go" class="hb hb-primary">FIND</button>
+      </form>
+      <div id="mining-status" class="dim"></div>
+      <div class="table-wrap">
+        <table id="mining-table" class="hidden">
+          <thead>
+            <tr>
+              <th class="sortable" data-sort="mineral">Mineral</th><th class="sortable" data-sort="method">Method</th><th class="num sortable" data-sort="sell">Sell</th>
+              <th class="sortable" data-sort="station">Best buyer</th><th class="num sortable" data-sort="jump">Jump</th><th class="num sortable" data-sort="demand">Demand</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
 
     <section class="card" data-arr="outfitting">
       <div class="label">OUTFITTING &amp; SHIPYARDS <span class="dim">nearest stations selling a module or ship · via Spansh</span></div>
@@ -362,7 +364,7 @@
           </select>
         </label>
         <label title="Search around another system instead — your carrier's destination, tomorrow's expedition stop…">Near <input type="text" id="os-near" placeholder="current system" autocomplete="off"></label>
-        <button type="submit" id="os-go" class="primary">SEARCH</button>
+        <button type="submit" id="os-go" class="hb hb-primary">SEARCH</button>
       </form>
       <div id="os-status" class="dim"></div>
       <div class="table-wrap">
@@ -421,7 +423,7 @@
         <label class="check" title="Fleet carriers can fit both services and often sit far out in the black — but they move, so a listed position may be stale. Untick to see only fixed starports.">
           <input type="checkbox" id="sd-carriers" checked> Include fleet carriers
         </label>
-        <button type="submit" id="sd-go" class="primary">FIND NEAREST</button>
+        <button type="submit" id="sd-go" class="hb hb-primary">FIND NEAREST</button>
       </form>
       <div id="sd-status" class="dim">Deep in the black and done exploring? This finds the closest place to turn your scans and samples into credits.</div>
       <div id="sd-results"></div>
@@ -436,7 +438,7 @@
       <form id="exo-form" class="route-form">
         <label title="Lower gravity = easier to land and drive the SRV">Max gravity (g) <input type="number" id="exo-grav" min="0.1" max="2" step="0.05" value="0.5"></label>
         <label title="Only show bodies worth at least this much in exobiology data">Min value (cr) <input type="number" id="exo-minvalue" min="0" step="any" value="3000000"></label>
-        <button type="submit" id="exo-go" class="primary">FIND ROUTE</button>
+        <button type="submit" id="exo-go" class="hb hb-primary">FIND ROUTE</button>
         <div class="exo-genus-filter">
           <span class="egf-label">Genera <span class="dim" id="exo-genus-hint">none = every genus</span></span>
           <div class="egf-chips" id="exo-genus-chips"></div>
@@ -454,7 +456,7 @@
         <label>Min value <input type="number" id="rr-minvalue" min="0" value="300000" step="any"></label>
         <label>Systems <input type="number" id="rr-max" min="1" max="100" value="25"></label>
         <label class="check"><input type="checkbox" id="rr-loop" checked> Loop back</label>
-        <button type="submit" id="rr-go" class="primary">PLAN ROUTE</button>
+        <button type="submit" id="rr-go" class="hb hb-primary">PLAN ROUTE</button>
       </form>
       <div id="rr-status" class="dim"></div>
       <div id="rr-results"></div>
@@ -466,7 +468,7 @@
         <label>Destination <input type="text" id="nr-to" placeholder="e.g. Colonia" autocomplete="off"></label>
         <label>Jump range (ly) <input type="number" id="nr-range" min="1" step="any"></label>
         <label>Efficiency % <input type="number" id="nr-eff" min="1" max="100" value="60"></label>
-        <button type="submit" id="nr-go" class="primary">PLOT</button>
+        <button type="submit" id="nr-go" class="hb hb-primary">PLOT</button>
       </form>
       <div id="nr-status" class="dim"></div>
       <div class="table-wrap">
@@ -511,7 +513,7 @@
           <p id="build-current-desc">Open your live loadout in a ship builder to plan the next module or
           engineering upgrade — fills in when the game reports a loadout (launch or switch ships).</p>
           <a class="extlink hidden" id="build-edsy" target="_blank" rel="noopener">Open in EDSY ↗</a>
-          <button class="extlink hidden" id="build-slef" type="button"
+          <button class="hb hb-utility hb-sm hidden" id="build-slef" type="button"
             title="Copy your loadout as SLEF JSON — paste it into the import box on Coriolis or Inara">⧉ Copy SLEF</button>
         </div>
         <div class="guide-item">
@@ -643,46 +645,6 @@
       <div class="dim" id="combat-session"></div>
       <div id="massacre-list"></div>
     </section>
-
-    <section class="card" id="iff-card" data-arr="iff">
-      <div class="label">PAY OFF BOUNTIES &amp; FINES <span class="dim">nearest Interstellar Factors contact · via Spansh</span></div>
-      <form id="iff-form" class="route-form">
-        <button type="submit" id="iff-go" class="primary">FIND NEAREST</button>
-      </form>
-      <div id="iff-status" class="dim">Picked up a bounty or a fine? An <b>Interstellar Factors</b> contact clears
-        your record from any station that hosts one (for a 25% cut) — no trip back to the issuing faction's space.
-        Your current legal state shows in the LEGAL readout up top.</div>
-      <div id="iff-results"></div>
-    </section>
-
-    <section class="card" id="ships-card" data-arr="ships">
-      <div class="card-head">
-        <div class="label">YOUR SHIPS <span class="dim">current + stored fleet · refreshed each shipyard visit</span></div>
-        <div class="value dim" id="ships-count"></div>
-      </div>
-      <div id="ships-list"></div>
-      <div id="ships-empty" class="dim empty">Open any station's shipyard once and your whole fleet appears here —
-        which ship is where, what it's worth, and what a transfer costs.</div>
-    </section>
-
-    <section class="card" id="colonisation-card" data-arr="colonisation">
-      <div class="label">COLONIZATION PROJECTS <span class="dim">construction depots you've visited · what's still needed and where to buy it</span></div>
-      <div id="colonisation-list"></div>
-      <div id="colonisation-empty" class="dim empty">No tracked construction projects yet. The game only shares a
-        depot's shopping list while you're docked at the construction site itself — the "Construction Site" or
-        colonisation ship, not just any station in a colonising system. Dock there once and this card fills in
-        with what's still needed, what each delivery pays, and the nearest places to buy it.</div>
-    </section>
-    <section class="card" id="sysstations-card" data-arr="sysstations">
-      <div class="label">SYSTEM STATIONS <span class="dim">every station's facts &amp; market · Spansh + your local DB</span></div>
-      <form id="ss-form" class="route-form">
-        <label>System <input type="text" id="ss-system" placeholder="current system" autocomplete="off"></label>
-        <button type="submit" id="ss-go" class="primary">VIEW</button>
-      </form>
-      <div id="ss-status" class="dim"></div>
-      <div id="ss-list"></div>
-    </section>
-
     <div class="two-col" data-arr="marketjumps">
       <section class="card" data-arr="market">
         <div class="card-head">
@@ -713,7 +675,7 @@
         <div id="jumps-empty" class="dim empty">No jumps recorded yet this session.</div>
         <div class="card-head cargo-label">
           <div class="label">CARGO HOLD</div>
-          <button id="cargo-sell-btn" class="primary small">WHERE TO SELL?</button>
+          <button id="cargo-sell-btn" class="hb hb-primary hb-sm">WHERE TO SELL?</button>
         </div>
         <ul id="cargo-list" class="cargo-list"></ul>
         <div id="cargo-empty" class="dim empty">Cargo hold is empty.</div>
@@ -721,6 +683,46 @@
         <div id="cargo-sell-results"></div>
       </section>
     </div>
+
+
+    <section class="card" id="ships-card" data-arr="ships">
+      <div class="card-head">
+        <div class="label">YOUR SHIPS <span class="dim">current + stored fleet · refreshed each shipyard visit</span></div>
+        <div class="value dim" id="ships-count"></div>
+      </div>
+      <div id="ships-list"></div>
+      <div id="ships-empty" class="dim empty">Open any station's shipyard once and your whole fleet appears here —
+        which ship is where, what it's worth, and what a transfer costs.</div>
+    </section>
+    <section class="card" id="sysstations-card" data-arr="sysstations">
+      <div class="label">SYSTEM STATIONS <span class="dim">every station's facts &amp; market · Spansh + your local DB</span></div>
+      <form id="ss-form" class="route-form">
+        <label>System <input type="text" id="ss-system" placeholder="current system" autocomplete="off"></label>
+        <button type="submit" id="ss-go" class="hb hb-primary">VIEW</button>
+      </form>
+      <div id="ss-status" class="dim"></div>
+      <div id="ss-list"></div>
+    </section>
+
+    <section class="card" id="colonisation-card" data-arr="colonisation">
+      <div class="label">COLONIZATION PROJECTS <span class="dim">construction depots you've visited · what's still needed and where to buy it</span></div>
+      <div id="colonisation-list"></div>
+      <div id="colonisation-empty" class="dim empty">No tracked construction projects yet. The game only shares a
+        depot's shopping list while you're docked at the construction site itself — the "Construction Site" or
+        colonisation ship, not just any station in a colonising system. Dock there once and this card fills in
+        with what's still needed, what each delivery pays, and the nearest places to buy it.</div>
+    </section>
+    <section class="card" id="iff-card" data-arr="iff">
+      <div class="label">PAY OFF BOUNTIES &amp; FINES <span class="dim">nearest Interstellar Factors contact · via Spansh</span></div>
+      <form id="iff-form" class="route-form">
+        <button type="submit" id="iff-go" class="hb hb-primary">FIND NEAREST</button>
+      </form>
+      <div id="iff-status" class="dim">Picked up a bounty or a fine? An <b>Interstellar Factors</b> contact clears
+        your record from any station that hosts one (for a 25% cut) — no trip back to the issuing faction's space.
+        Your current legal state shows in the LEGAL readout up top.</div>
+      <div id="iff-results"></div>
+    </section>
+
 
   </div>
 
@@ -735,25 +737,6 @@
         next launch. <b>Engineers</b> are characters who upgrade modules far beyond shop quality; you unlock them
         one by one. Unlock requirements live on
         <a class="extlink" href="https://inara.cz/elite/engineers/" target="_blank" rel="noopener">Inara · Engineers ↗</a>.</div>
-    </section>
-
-    <section class="card" id="materials-card" data-arr="materials">
-      <div class="card-head">
-        <div class="label">ENGINEERING MATERIALS <span class="dim">raw · manufactured · encoded · from your journal</span></div>
-        <div class="value dim" id="materials-total"></div>
-      </div>
-      <div id="synth-line" class="dim synth-line hidden"
-        title="FSD injection ('jumponium'): synthesize a one-jump range boost from raw materials — Basic +25%, Standard +50%, Premium +100%. Craft it in the ship's right-hand panel → Inventory → Synthesis. The counts show how many of each you could make right now."></div>
-      <div id="materials-groups" class="materials"></div>
-      <div id="materials-empty" class="dim empty">No materials recorded yet — the game logs your full inventory when you next launch it.</div>
-    </section>
-
-    <section class="card hidden" id="odyssey-card" data-arr="odyssey">
-      <div class="card-head">
-        <div class="label">ODYSSEY LOCKER <span class="dim">on-foot goods · assets · data — spent at bartenders and on-foot engineers for suit &amp; weapon upgrades</span></div>
-        <div class="value dim" id="odyssey-total"></div>
-      </div>
-      <div id="odyssey-groups" class="materials"></div>
     </section>
 
     <section class="card" id="engplan-card" data-arr="engplanner">
@@ -794,8 +777,8 @@
         <label>Quantity
           <input id="ep-quantity" type="number" min="1" max="99" value="1" inputmode="numeric">
         </label>
-        <button type="submit" id="ep-pin" class="primary" title="Add or update this item in the wishlist">ADD TO WISHLIST</button>
-        <button type="button" id="ep-traders" class="copy" title="Find nearby raw, manufactured and encoded material traders">FIND TRADERS</button>
+        <button type="submit" id="ep-pin" class="hb hb-primary" title="Add or update this item in the wishlist">ADD TO WISHLIST</button>
+        <button type="button" id="ep-traders" class="hb hb-utility" title="Find nearby raw, manufactured and encoded material traders">FIND TRADERS</button>
       </form>
       <div class="ep-picker-meta">
         <div class="dim" id="ep-match-count"></div>
@@ -806,6 +789,25 @@
       <div id="engplan-materials"></div>
       <div id="engplan-traders"></div>
     </section>
+    <section class="card" id="materials-card" data-arr="materials">
+      <div class="card-head">
+        <div class="label">ENGINEERING MATERIALS <span class="dim">raw · manufactured · encoded · from your journal</span></div>
+        <div class="value dim" id="materials-total"></div>
+      </div>
+      <div id="synth-line" class="dim synth-line hidden"
+        title="FSD injection ('jumponium'): synthesize a one-jump range boost from raw materials — Basic +25%, Standard +50%, Premium +100%. Craft it in the ship's right-hand panel → Inventory → Synthesis. The counts show how many of each you could make right now."></div>
+      <div id="materials-groups" class="materials"></div>
+      <div id="materials-empty" class="dim empty">No materials recorded yet — the game logs your full inventory when you next launch it.</div>
+    </section>
+
+    <section class="card hidden" id="odyssey-card" data-arr="odyssey">
+      <div class="card-head">
+        <div class="label">ODYSSEY LOCKER <span class="dim">on-foot goods · assets · data — spent at bartenders and on-foot engineers for suit &amp; weapon upgrades</span></div>
+        <div class="value dim" id="odyssey-total"></div>
+      </div>
+      <div id="odyssey-groups" class="materials"></div>
+    </section>
+
   </div>
 
   <div class="tabpane hidden" id="tab-ops">
@@ -827,7 +829,7 @@
         <label>Maximum tasks
           <input id="ops-max-tasks" type="number" min="1" max="24" value="6" required>
         </label>
-        <button id="ops-plan-go" class="primary" type="submit">BUILD SESSION PLAN</button>
+        <button id="ops-plan-go" class="hb hb-primary" type="submit">BUILD SESSION PLAN</button>
       </form>
       <div id="ops-plan-status" class="dim">Frameshift will rank known work by urgency, value, risk and your available time.</div>
       <div id="ops-plan-warnings" class="ops-warnings hidden" role="status"></div>
@@ -901,8 +903,8 @@
             <option value="dismissed">Dismissed</option>
           </select>
         </label>
-        <button id="ops-objective-save" class="primary" type="submit">ADD OBJECTIVE</button>
-        <button id="ops-objective-cancel" class="copy hidden" type="button">CANCEL EDIT</button>
+        <button id="ops-objective-save" class="hb hb-primary" type="submit">ADD OBJECTIVE</button>
+        <button id="ops-objective-cancel" class="hb hb-ghost hidden" type="button">CANCEL EDIT</button>
       </form>
       <div id="ops-objective-statusline" class="dim"></div>
       <div id="ops-objective-list" class="ops-record-list"></div>
@@ -913,9 +915,9 @@
         <div class="label">OPERATIONS BOARD <span class="dim">account-free coordination · deterministic file merge</span></div>
         <div class="ops-head-actions">
           <select id="ops-board-select" aria-label="Select operations board"><option value="">NO BOARDS</option></select>
-          <button id="ops-board-refresh" class="copy" type="button">REFRESH</button>
-          <button id="ops-board-export" class="copy" type="button" disabled>EXPORT JSON</button>
-          <button id="ops-board-import-trigger" class="copy ops-file-button" type="button">IMPORT JSON</button>
+          <button id="ops-board-refresh" class="hb hb-utility" type="button">REFRESH</button>
+          <button id="ops-board-export" class="hb hb-utility" type="button" disabled>EXPORT JSON</button>
+          <button id="ops-board-import-trigger" class="hb hb-utility ops-file-button" type="button">IMPORT JSON</button>
           <input id="ops-board-import" type="file" accept="application/json,.json" hidden>
         </div>
       </div>
@@ -928,7 +930,7 @@
           <label class="ops-grow">Briefing
             <input id="ops-board-description" type="text" maxlength="1000" placeholder="Scope, rendezvous and success condition">
           </label>
-          <button class="primary" type="submit">CREATE BOARD</button>
+          <button class="hb hb-primary" type="submit">CREATE BOARD</button>
         </form>
       </details>
       <div id="ops-import-report" class="dim"></div>
@@ -948,7 +950,7 @@
               <option value="complete">COMPLETE</option>
               <option value="archived">ARCHIVED</option>
             </select>
-            <button id="ops-board-delete" class="copy danger" type="button">DELETE BOARD</button>
+            <button id="ops-board-delete" class="hb hb-utility hb-danger" type="button">DELETE BOARD</button>
           </div>
         </div>
         <div id="ops-conflicts" class="ops-conflicts hidden" role="status"></div>
@@ -963,7 +965,7 @@
               <input id="ops-board-objective-station" type="text" maxlength="160" placeholder="Station / body" aria-label="Objective station or body">
               <input id="ops-board-objective-deadline" type="datetime-local" title="Deadline" aria-label="Objective deadline">
               <input id="ops-board-objective-priority" type="number" min="0" max="100" value="50" title="Priority" aria-label="Objective priority">
-              <button class="primary small" type="submit">ADD</button>
+              <button class="hb hb-primary hb-sm" type="submit">ADD</button>
             </form>
             <div id="ops-board-objectives" class="ops-record-list"></div>
           </section>
@@ -974,7 +976,7 @@
               <select id="ops-assignment-objective" aria-label="Assignment objective"><option value="">Whole board</option></select>
               <input id="ops-assignment-name" type="text" maxlength="160" placeholder="Commander / wing" aria-label="Assigned commander or wing" required>
               <input id="ops-assignment-role" type="text" maxlength="160" placeholder="Role" aria-label="Assignment role">
-              <button class="primary small" type="submit">ASSIGN</button>
+              <button class="hb hb-primary hb-sm" type="submit">ASSIGN</button>
             </form>
             <div id="ops-assignments" class="ops-record-list"></div>
           </section>
@@ -993,7 +995,7 @@
               <input id="ops-reservation-amount" type="number" min="0.01" step="any" placeholder="Amount" aria-label="Reserved amount" required>
               <input id="ops-reservation-unit" type="text" maxlength="40" placeholder="t / units" aria-label="Reservation unit">
               <input id="ops-reservation-assignee" type="text" maxlength="160" placeholder="Reserved by" aria-label="Reservation owner">
-              <button class="primary small" type="submit">RESERVE</button>
+              <button class="hb hb-primary hb-sm" type="submit">RESERVE</button>
             </form>
             <div id="ops-reservations" class="ops-record-list"></div>
           </section>
@@ -1007,7 +1009,7 @@
               <input id="ops-contribution-amount" type="number" min="0.01" step="any" placeholder="Amount" aria-label="Contribution amount" required>
               <input id="ops-contribution-unit" type="text" maxlength="40" placeholder="t / bonds" aria-label="Contribution unit">
               <input id="ops-contribution-note" type="text" maxlength="1000" placeholder="Note or evidence" aria-label="Contribution note or evidence">
-              <button class="primary small" type="submit">LOG</button>
+              <button class="hb hb-primary hb-sm" type="submit">LOG</button>
             </form>
             <div id="ops-contributions" class="ops-record-list"></div>
           </section>
@@ -1023,17 +1025,17 @@
       on this machine; no account, API key or online service is involved.
     </div>
 
-    <div class="sp-switcher" role="tablist" aria-label="Specialist workflow">
-      <button type="button" role="tab" class="active" data-specialist="mining" aria-controls="sp-workflow-mining" aria-selected="true">
+    <div class="sp-switcher hb-group" role="tablist" aria-label="Specialist workflow">
+      <button type="button" role="tab" class="hb" aria-pressed="true" data-specialist="mining" aria-controls="sp-workflow-mining" aria-selected="true">
         <span aria-hidden="true">◆</span><b>MINING</b><small>yield &amp; limpets</small>
       </button>
-      <button type="button" role="tab" data-specialist="combat" aria-controls="sp-workflow-combat" aria-selected="false">
+      <button type="button" role="tab" class="hb" aria-pressed="false" data-specialist="combat" aria-controls="sp-workflow-combat" aria-selected="false">
         <span aria-hidden="true">⌁</span><b>COMBAT / AX</b><small>readiness &amp; claims</small>
       </button>
-      <button type="button" role="tab" data-specialist="carrier" aria-controls="sp-workflow-carrier" aria-selected="false">
+      <button type="button" role="tab" class="hb" aria-pressed="false" data-specialist="carrier" aria-controls="sp-workflow-carrier" aria-selected="false">
         <span aria-hidden="true">▰</span><b>CARRIER</b><small>runway &amp; tritium</small>
       </button>
-      <button type="button" role="tab" data-specialist="exobiology" aria-controls="sp-workflow-exobiology" aria-selected="false">
+      <button type="button" role="tab" class="hb" aria-pressed="false" data-specialist="exobiology" aria-controls="sp-workflow-exobiology" aria-selected="false">
         <span aria-hidden="true">⌾</span><b>EXOBIO</b><small>surface navigator</small>
       </button>
     </div>
@@ -1045,8 +1047,8 @@
           <div class="label">MINING RUN <span class="dim">journal-counted yield · no guessed sale attribution</span></div>
           <div class="sp-head-actions">
             <span id="sp-mining-state" class="sp-state idle">IDLE</span>
-            <button id="sp-mining-start" class="primary small" type="button">START RUN</button>
-            <button id="sp-mining-end" class="copy" type="button" disabled>END RUN</button>
+            <button id="sp-mining-start" class="hb hb-primary hb-sm" type="button">START RUN</button>
+            <button id="sp-mining-end" class="hb hb-utility" type="button" disabled>END RUN</button>
           </div>
         </div>
         <div id="sp-mining-message" class="dim">A run also starts automatically when the journal reports mining activity.</div>
@@ -1128,8 +1130,8 @@
           <div class="label">COMBAT SESSION <span class="dim">kills, claims, damage and synthesis from your journal</span></div>
           <div class="sp-head-actions">
             <span id="sp-combat-state" class="sp-state idle">IDLE</span>
-            <button id="sp-combat-start" class="primary small" type="button">START SESSION</button>
-            <button id="sp-combat-end" class="copy" type="button" disabled>END SESSION</button>
+            <button id="sp-combat-start" class="hb hb-primary hb-sm" type="button">START SESSION</button>
+            <button id="sp-combat-end" class="hb hb-utility" type="button" disabled>END SESSION</button>
           </div>
         </div>
         <div id="sp-combat-message" class="dim">A session also starts automatically on a kill, attack or damage event.</div>
@@ -1180,7 +1182,7 @@
             <label>Reserve target (weeks)
               <input id="sp-carrier-target-weeks" type="number" min="0" max="520" value="8" required>
             </label>
-            <button class="primary" type="submit">SAVE LOCAL INPUT</button>
+            <button class="hb hb-primary" type="submit">SAVE LOCAL INPUT</button>
           </form>
           <div id="sp-carrier-upkeep-note" class="dim">Frameshift never invents a weekly upkeep value.</div>
         </section>
@@ -1191,7 +1193,7 @@
             <label class="sp-grow">Commodity inventory
               <textarea id="sp-carrier-inventory-input" rows="4" placeholder="Tritium | 850&#10;Palladium | 120"></textarea>
             </label>
-            <button class="primary" type="submit">SAVE INVENTORY</button>
+            <button class="hb hb-primary" type="submit">SAVE INVENTORY</button>
           </form>
           <div id="sp-carrier-inventory-source" class="dim"></div>
           <div id="sp-carrier-inventory" class="sp-chip-list"></div>
@@ -1201,7 +1203,7 @@
       <section class="card" data-arr="specialist-carrier-route">
         <div class="card-head">
           <div class="label">TRITIUM ROUTE <span class="dim">every leg and fuel figure is explicit</span></div>
-          <button id="sp-carrier-add-leg" class="copy" type="button">+ ADD LEG</button>
+          <button id="sp-carrier-add-leg" class="hb hb-utility" type="button">+ ADD LEG</button>
         </div>
         <form id="sp-carrier-route-form" class="sp-form">
           <div id="sp-carrier-legs" class="sp-route-legs"></div>
@@ -1212,7 +1214,7 @@
             <label>Arrival reserve (t)
               <input id="sp-carrier-route-reserve" type="number" min="0" step="1" value="0">
             </label>
-            <button class="primary" type="submit">CHECK ROUTE</button>
+            <button class="hb hb-primary" type="submit">CHECK ROUTE</button>
           </div>
         </form>
         <div id="sp-carrier-route-result" class="sp-route-result dim">Add systems and exact leg distances; Frameshift checks observed range and tritium coverage.</div>
@@ -1236,7 +1238,7 @@
           <div class="label">SURFACE NAVIGATOR <span class="dim">body-local map · north-up · journal + Status.json</span></div>
           <div class="sp-head-actions">
             <span id="sp-exobio-body" class="value dim">NO SURFACE POSITION</span>
-            <button id="sp-exobio-export" class="copy" type="button" disabled>EXPORT GEOJSON</button>
+            <button id="sp-exobio-export" class="hb hb-utility" type="button" disabled>EXPORT GEOJSON</button>
           </div>
         </div>
         <div class="sp-map-layout">
@@ -1274,7 +1276,7 @@
               <option value="hazard">Hazard</option>
             </select>
           </label>
-          <button id="sp-exobio-pin-add" class="primary" type="submit">PIN CURRENT POSITION</button>
+          <button id="sp-exobio-pin-add" class="hb hb-primary" type="submit">PIN CURRENT POSITION</button>
         </form>
         <div id="sp-exobio-pin-status" class="dim">Pins require a live latitude and longitude from Status.json.</div>
         <div id="sp-exobio-pins" class="sp-pin-list"></div>
@@ -1328,7 +1330,7 @@
         <div class="label">LOCAL VISIT HISTORY <span class="dim">change since your previous observation &middot; saved in this browser</span></div>
         <div class="galhistory-actions">
           <div class="value dim" id="galhistory-count"></div>
-          <button type="button" class="copy small danger" id="galhistory-clear" title="Delete old Galaxy observations and use the current system as a new baseline">CLEAR</button>
+          <button type="button" class="hb hb-utility hb-sm hb-danger" id="galhistory-clear" title="Delete old Galaxy observations and use the current system as a new baseline">CLEAR</button>
         </div>
       </div>
       <div id="galhistory-summary"></div>
@@ -1368,7 +1370,7 @@
     <section class="card" id="security-card" data-arr="security">
       <div class="card-head">
         <div class="label">PAIRED DEVICES <span class="dim">zero-account LAN security · localhost stays automatic</span></div>
-        <button id="pairing-refresh" class="primary small">NEW ONE-TIME LINK</button>
+        <button id="pairing-refresh" class="hb hb-primary hb-sm">NEW ONE-TIME LINK</button>
       </div>
       <div id="security-state" class="dim">Checking device security…</div>
       <div id="pairing-share" class="pairing-share hidden">
@@ -1379,7 +1381,7 @@
         <label>Open this once on a tablet or second computer
           <div class="pairing-link-row">
             <input id="pairing-link" type="text" readonly aria-label="One-time pairing link">
-            <button id="pairing-copy" class="copy" type="button">COPY</button>
+            <button id="pairing-copy" class="hb hb-utility" type="button">COPY</button>
           </div>
         </label>
         <div class="dim" id="pairing-expiry"></div>
@@ -1390,7 +1392,7 @@
     <section class="card" id="profiles-card" data-arr="profiles">
       <div class="card-head">
         <div class="label">COMMANDER PROFILES <span class="dim">who owns this machine's local history</span></div>
-        <button id="profiles-refresh" class="copy small" type="button">REFRESH</button>
+        <button id="profiles-refresh" class="hb hb-utility hb-sm" type="button">REFRESH</button>
       </div>
       <div class="dim profiles-primer">Frameshift keeps analytics, watches and workflow history per commander,
         matched from your journal. History recorded before v2.1 — or by a test/borrowed account — can end up
@@ -1403,8 +1405,8 @@
       <div class="card-head">
         <div class="label">LOCAL HEALTH &amp; EXTENSIONS <span class="dim">private diagnostics · permissioned local packs</span></div>
         <div class="service-actions">
-          <button id="extensions-reload" class="copy small" type="button">RELOAD PACKS</button>
-          <button id="diagnostics-bundle" class="primary small" type="button">SUPPORT BUNDLE</button>
+          <button id="extensions-reload" class="hb hb-utility hb-sm" type="button">RELOAD PACKS</button>
+          <button id="diagnostics-bundle" class="hb hb-primary hb-sm" type="button">SUPPORT BUNDLE</button>
         </div>
       </div>
       <div id="local-health" class="dim">Checking local services…</div>
@@ -1414,7 +1416,7 @@
     <section class="card" id="ext-builder-card" data-arr="extbuilder">
       <div class="card-head">
         <div class="label">EXTENSION BUILDER <span class="exp-tag" title="New in this build — freshly commissioned and still being tuned. Everything it saves is a plain local pack you can remove anytime.">◇ EXPERIMENTAL</span> <span class="dim">your own alerts &amp; objective suggestions from game events · no code needed</span></div>
-        <button id="xb-new" class="primary small" type="button">＋ NEW EXTENSION</button>
+        <button id="xb-new" class="hb hb-primary hb-sm" type="button">＋ NEW EXTENSION</button>
       </div>
       <div class="dim xb-primer">Pick a game event, add conditions if you want them, and choose what happens —
         a cockpit alert (with optional voice callout) or a suggested objective. Test it against your own recent
@@ -1427,11 +1429,11 @@
           <div class="xb-idline dim">saves as <span id="xb-id" class="mono">—</span></div>
         </div>
         <div id="xb-rules"></div>
-        <button type="button" id="xb-add-rule" class="copy small">＋ ADD ANOTHER RULE</button>
+        <button type="button" id="xb-add-rule" class="hb hb-utility hb-sm">＋ ADD ANOTHER RULE</button>
         <div class="xb-actions">
-          <button type="button" id="xb-test" class="copy">▶ TEST AGAINST MY HISTORY</button>
-          <button type="submit" id="xb-save" class="primary">SAVE &amp; ACTIVATE</button>
-          <button type="button" id="xb-cancel" class="copy">CANCEL</button>
+          <button type="button" id="xb-test" class="hb hb-utility">▶ TEST AGAINST MY HISTORY</button>
+          <button type="submit" id="xb-save" class="hb hb-primary">SAVE &amp; ACTIVATE</button>
+          <button type="button" id="xb-cancel" class="hb hb-ghost">CANCEL</button>
         </div>
         <div id="xb-status" class="dim"></div>
         <div id="xb-results" class="xb-results hidden"></div>
@@ -1441,7 +1443,7 @@
     <section class="card" data-arr="marketdb">
       <div class="card-head">
         <div class="label">MARKET DATABASE <span class="dim">powers trade routes, commodity search &amp; mining · seeded from the Spansh dump, then live-updated by EDDN</span></div>
-        <button id="seed-btn" class="primary small">BUILD DATABASE (~3.9 GB download)</button>
+        <button id="seed-btn" class="hb hb-primary hb-sm">BUILD DATABASE (~3.9 GB download)</button>
       </div>
       <div id="db-status" class="dim">Checking…</div>
       <div class="seedbar hidden" id="seed-bar"><div id="seed-fill"></div></div>

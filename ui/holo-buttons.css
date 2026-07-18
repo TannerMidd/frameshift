@@ -1,0 +1,169 @@
+/* ============================================================
+   HOLO BRACKET — Frameshift button system v1.0
+   Drop-in for ui/style.css (or load after it). Speaks the existing
+   :root vars, so per-device color themes keep working:
+   --orange, --orange-soft, --accent-rgb, --bad, --good,
+   --text, --dim, --border, --border-bright.
+   ============================================================ */
+
+/* ---- base (secondary tier is the default) ---- */
+.hb {
+  position: relative;
+  background: rgba(var(--accent-rgb), .05);
+  color: var(--orange-soft);
+  border: 1px solid rgba(var(--accent-rgb), .32);
+  border-radius: 2px;
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 600;
+  letter-spacing: 3px;
+  font-size: 13px;
+  padding: 15px 28px;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition: background .18s, color .18s, border-color .18s, box-shadow .18s;
+}
+
+/* corner brackets */
+.hb::before, .hb::after {
+  content: "";
+  position: absolute;
+  width: 12px; height: 12px;
+  pointer-events: none;
+  transition: top .18s, left .18s, right .18s, bottom .18s;
+  animation: hb-pulse 2.4s ease-in-out infinite;
+}
+.hb::before { top: -5px; left: -5px; border-top: 2px solid var(--orange); border-left: 2px solid var(--orange); }
+.hb::after { bottom: -5px; right: -5px; border-bottom: 2px solid var(--orange); border-right: 2px solid var(--orange); }
+
+.hb:hover {
+  background: rgba(var(--accent-rgb), .12);
+  color: var(--orange);
+  border-color: rgba(var(--accent-rgb), .7);
+  box-shadow: 0 0 20px rgba(var(--accent-rgb), .12);
+}
+.hb:hover::before { top: -8px; left: -8px; }
+.hb:hover::after { bottom: -8px; right: -8px; }
+.hb:active { background: rgba(var(--accent-rgb), .24); }
+.hb:focus-visible { outline: 2px solid var(--orange-soft); outline-offset: 3px; }
+
+/* ---- tiers ---- */
+.hb-primary {
+  background: var(--orange);
+  color: #14100a;
+  border-color: var(--orange);
+  font-weight: 700;
+}
+.hb-primary:hover {
+  background: var(--orange-soft);
+  border-color: var(--orange-soft);
+  color: #14100a;
+  box-shadow: 0 0 26px rgba(var(--accent-rgb), .35);
+}
+.hb-primary:active { background: #ffb066; }
+
+.hb-ghost { background: transparent; color: var(--dim); border-color: var(--border); }
+.hb-ghost::before, .hb-ghost::after { display: none; }
+.hb-ghost:hover { background: transparent; color: var(--text); border-color: var(--border-bright); box-shadow: none; }
+.hb-ghost:active { background: rgba(216, 219, 224, .08); }
+
+.hb-utility {
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 500;
+  letter-spacing: 2px;
+  font-size: 11px;
+  padding: 8px 14px;
+}
+.hb-utility::before, .hb-utility::after { display: none; }
+
+/* ---- semantic colors ---- */
+.hb-danger {
+  background: rgba(224, 93, 93, .06);
+  color: var(--bad);
+  border-color: rgba(224, 93, 93, .4);
+}
+.hb-danger::before { border-color: var(--bad); }
+.hb-danger::after { border-color: var(--bad); }
+.hb-danger:hover { background: rgba(224, 93, 93, .14); color: #ff8e7f; border-color: rgba(224, 93, 93, .8); box-shadow: 0 0 20px rgba(224, 93, 93, .12); }
+.hb-danger:active { background: rgba(224, 93, 93, .26); }
+
+.hb-good {
+  background: rgba(111, 191, 115, .07);
+  color: var(--good);
+  border-color: rgba(111, 191, 115, .45);
+}
+.hb-good::before, .hb-good::after { display: none; }
+.hb-good:hover { background: rgba(111, 191, 115, .14); color: var(--good); border-color: rgba(111, 191, 115, .8); box-shadow: none; }
+
+/* ---- sizes ---- */
+.hb-lg { font-size: 14px; font-weight: 700; padding: 17px 34px; }
+.hb-lg::before { width: 14px; height: 14px; top: -6px; left: -6px; }
+.hb-lg::after { width: 14px; height: 14px; bottom: -6px; right: -6px; }
+.hb-sm { font-size: 11px; letter-spacing: 2px; padding: 9px 16px; }
+.hb-sm::before, .hb-sm::after { width: 9px; height: 9px; }
+.hb-icon { width: 48px; height: 48px; padding: 0; font-size: 18px; letter-spacing: 0; }
+.hb-icon.hb-sm { width: 34px; height: 34px; font-size: 14px; }
+
+/* ---- states ---- */
+.hb:disabled {
+  background: transparent;
+  color: #5c626c;
+  border: 1px dashed var(--border);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.hb:disabled::before, .hb:disabled::after { display: none; }
+
+/* busy: set aria-busy="true" + disabled; brackets pulse fast */
+.hb[aria-busy="true"]:disabled {
+  background: rgba(var(--accent-rgb), .04);
+  color: var(--orange-soft);
+  border: 1px solid rgba(var(--accent-rgb), .32);
+  cursor: wait;
+  animation: busy-pulse 1.4s ease-in-out infinite;
+}
+.hb[aria-busy="true"]:disabled::before,
+.hb[aria-busy="true"]:disabled::after { display: block; animation: hb-pulse .7s ease-in-out infinite; }
+
+/* toggle: drive with aria-pressed */
+.hb[aria-pressed="true"] {
+  background: rgba(var(--accent-rgb), .14);
+  color: var(--orange);
+  border-color: var(--orange);
+  box-shadow: 0 0 18px rgba(var(--accent-rgb), .3);
+}
+
+/* segmented group / tabs */
+.hb-group { display: flex; }
+.hb-group .hb { margin-left: -1px; }
+.hb-group .hb:first-child { margin-left: 0; }
+.hb-group .hb[aria-pressed="true"] { z-index: 1; }
+.hb-group .hb::before, .hb-group .hb::after { display: none; }
+.hb-group .hb[aria-pressed="true"]::before,
+.hb-group .hb[aria-pressed="true"]::after { display: block; }
+
+/* ---- press FX (face flash; span injected by hb.js) ---- */
+.hb-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--orange);
+  opacity: 0;
+  animation: hb-flash .35s ease-out forwards;
+}
+.hb-danger .hb-fx { background: var(--bad); }
+.hb-good .hb-fx { background: var(--good); }
+
+@keyframes hb-flash { from { opacity: .55; } to { opacity: 0; } }
+@keyframes hb-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+
+/* ---- touch / panel mode ---- */
+body.panel-mode .hb { min-height: 54px; font-size: 14px; }
+body.panel-mode .hb-icon { width: 54px; height: 54px; }
+body.panel-mode .hb-utility { min-height: 44px; }
+
+/* ---- reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .hb::before, .hb::after, .hb[aria-busy="true"]:disabled { animation: none; }
+  .hb-fx { display: none; }
+}

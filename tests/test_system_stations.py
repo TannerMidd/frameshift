@@ -25,6 +25,9 @@ dump = {
          "landingPads": {"large": 8, "medium": 10, "small": 4},
          "services": ["Dock", "Market", "Outfitting", "Material Trader"],
          "market": {}},
+        {"id": 4, "name": "K7Q-B0Z", "type": "Drake-Class Carrier", "distanceToArrival": 5.0,
+         "landingPads": {"large": 8, "medium": 4, "small": 4},
+         "services": ["Dock"], "market": {}},
     ],
     "bodies": [
         {"name": "Testland 2", "stations": [
@@ -35,8 +38,10 @@ dump = {
 }
 
 sts = _parse_dump_stations(dump)
-assert [s["station"] for s in sts] == ["Near Orbital", "Dusty Pad", "Far Orbital"], \
-    [s["station"] for s in sts]  # sorted by arrival distance
+# Sorted by arrival distance; fleet carriers sink below real ports even when
+# they sit closer to the star.
+assert [s["station"] for s in sts] == ["Near Orbital", "Dusty Pad", "Far Orbital", "K7Q-B0Z"], \
+    [s["station"] for s in sts]
 far = next(s for s in sts if s["station"] == "Far Orbital")
 assert far["pads"] == {"l": 4, "m": 6, "s": 2} and far["faction"] == "Test Corp"
 assert far["has_market"] and far["services"] == ["Market", "Shipyard", "Vista Genomics"], far["services"]
