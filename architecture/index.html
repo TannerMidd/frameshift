@@ -299,6 +299,10 @@ footer.colophon {
   <a href="#s11"><span class="n">11</span> Quality</a>
   <a href="#s12"><span class="n">12</span> Module reference</a>
   <a href="#s13"><span class="n">13</span> Links</a>
+  <div class="toc-label" style="margin-top:18px">SOURCE LINKS</div>
+  <a href="../"><span class="n">←</span> Showcase</a>
+  <a href="https://github.com/TannerMidd/frameshift/blob/main/docs/UI_ARCHITECTURE.md"><span class="n">↗</span> UI contract</a>
+  <a href="https://github.com/TannerMidd/frameshift/blob/main/docs/UI_ARCHITECTURE_PLAN.md"><span class="n">↗</span> Modernization record</a>
 </nav>
 <main>
 
@@ -308,21 +312,22 @@ footer.colophon {
   <p class="subtitle">A local-first flight companion for Elite&nbsp;Dangerous: journal telemetry, a
   self-hosted trading engine, and a touch-ready cockpit panel — one Python process, no accounts, no cloud.</p>
   <div class="docmeta">
-    <span>REV <b>v2.3.0</b></span>
-    <span>DATE <b>2026-07-14</b></span>
+    <span>REV <b>v2.5.0</b></span>
+    <span>DATE <b>2026-07-18</b></span>
     <span>LICENSE <b>MIT</b></span>
     <span>REPO <b><a href="https://github.com/TannerMidd/frameshift">github.com/TannerMidd/frameshift</a></b></span>
   </div>
   <div class="hazard" aria-hidden="true"></div>
   <div class="stats" role="list">
-    <div class="stat" role="listitem"><div class="v">20.3k</div><div class="k">Python LOC</div></div>
-    <div class="stat" role="listitem"><div class="v">12.6k</div><div class="k">UI LOC</div></div>
-    <div class="stat" role="listitem"><div class="v">44</div><div class="k">Modules</div></div>
-    <div class="stat" role="listitem"><div class="v">87</div><div class="k">API endpoints</div></div>
-    <div class="stat" role="listitem"><div class="v">59</div><div class="k">Test files</div></div>
-    <div class="stat" role="listitem"><div class="v">36</div><div class="k">Releases</div></div>
-    <div class="stat" role="listitem"><div class="v">5</div><div class="k">Runtime deps</div></div>
-    <div class="stat" role="listitem"><div class="v">0</div><div class="k">CodeQL alerts</div></div>
+    <div class="stat" role="listitem"><div class="v">44</div><div class="k">Backend modules</div></div>
+    <div class="stat" role="listitem"><div class="v">134</div><div class="k">UI modules</div></div>
+    <div class="stat" role="listitem"><div class="v">89</div><div class="k">API routes</div></div>
+    <div class="stat" role="listitem"><div class="v">87</div><div class="k">Test files</div></div>
+    <div class="stat" role="listitem"><div class="v">12</div><div class="k">Contracted clients</div></div>
+    <div class="stat" role="listitem"><div class="v">462</div><div class="k">ESM edges</div></div>
+    <div class="stat" role="listitem"><div class="v">0</div><div class="k">Dependency cycles</div></div>
+    <div class="stat" role="listitem"><div class="v">0</div><div class="k">Legacy bridges</div></div>
+    <div class="stat" role="listitem"><div class="v">38</div><div class="k">Releases</div></div>
   </div>
 </header>
 
@@ -352,7 +357,7 @@ footer.colophon {
 
   <h3>Technology stack</h3>
   <dl class="kv">
-    <dt>Language</dt><dd>Python 3.12 (backend) · vanilla ES2020 JavaScript, no framework (frontend)</dd>
+    <dt>Language</dt><dd>Python 3.12 (backend) · native ES2022 modules checked in strict TypeScript mode, no framework (frontend)</dd>
     <dt>Server</dt><dd>Flask 3 behind Werkzeug's threaded WSGI server, LAN-bound</dd>
     <dt>Storage</dt><dd>SQLite (WAL mode) — two databases plus JSON stores; no external services</dd>
     <dt>Desktop shell</dt><dd>pywebview window hosting the same web UI; also runs fully headless</dd>
@@ -364,8 +369,8 @@ footer.colophon {
   <div class="callout">
     <div class="c-label">Reading this document</div>
     <p>Sections 01–03 explain how data moves. Sections 04–06 cover storage and the trust model.
-    Sections 07–11 cover the UI, integrations and the delivery pipeline. Sections 12–13 are reference:
-    every module, every release. Figures are numbered and referenced from the text.</p>
+    Sections 07–11 cover the UI, integrations and the delivery pipeline. Sections 12–13 provide measured source
+    maps and links to the living contribution contract. Figures are numbered and referenced from the text.</p>
   </div>
 </section>
 
@@ -409,7 +414,7 @@ footer.colophon {
 
       <rect x="316" y="208" width="248" height="46" rx="3" class="box"/>
       <text x="330" y="227" class="dt" font-size="11.5">Flask ServerThread</text>
-      <text x="330" y="243" class="dd" font-size="10">87 endpoints · scope guard</text>
+      <text x="330" y="243" class="dd" font-size="10">89 API routes · scope guard</text>
 
       <rect x="316" y="264" width="120" height="46" rx="3" class="box"/>
       <text x="328" y="283" class="dt" font-size="11">EddnListener</text>
@@ -747,16 +752,17 @@ footer.colophon {
 <!-- ============================================================ -->
 <section id="s05">
   <div class="sec-head"><span class="code">05</span><h2>HTTP API</h2></div>
-  <p>The Flask server exposes <strong>87 endpoints</strong> under <code>/api/</code>, plus the static UI.
+  <p>The Flask server exposes <strong>89 routes</strong> under <code>/api/</code>, plus the static UI.
   Authorization is <em>default-deny</em>: a route added tomorrow gets a scope requirement automatically —
   unlisted GETs require <span class="chip read">READ</span>, unlisted mutations require
   <span class="chip control">CONTROL</span>, and only two endpoints (pairing itself) are public.
   Long-running search POSTs that mutate nothing are explicitly allow-listed back down to read.</p>
 
-  <p>Commander-scoped domains (<code>engineering</code>, <code>objectives</code>, <code>timings</code>,
-  <code>history</code>, <code>operations</code>, <code>specialists</code>, <code>alerts</code>, <code>watch</code>,
-  <code>analytics</code>) additionally require the <code>X-Frameshift-Commander</code> header so a device can never
-  read or write another profile's data by accident.</p>
+  <p>Commander ownership is route metadata, not an informal client convention. <strong>46 routes always require</strong>
+  an <code>X-Frameshift-Commander</code> identity and one extension-test route requires it conditionally when the
+  request reads journal history. The server captures one state snapshot when the request begins, rejects a missing or
+  stale identity, and never falls back to a mutable active profile during a journal handoff. A policy audit enumerates
+  every route and fails when ownership metadata is missing.</p>
 
   <div class="table-wrap"><table>
     <thead><tr><th>Endpoint</th><th>Method</th><th>Scope</th><th>Purpose</th></tr></thead>
@@ -880,8 +886,8 @@ footer.colophon {
   <h3>Hardening conventions</h3>
   <ul>
     <li><strong>Path confinement.</strong> Every filesystem sink that touches a user-influenced path normalizes and
-      then executes <em>inside</em> a positive <code>startswith(root)</code> branch — the shape CodeQL's taint
-      tracking verifies. The repository is kept at zero code-scanning alerts as a release gate.</li>
+      then executes <em>inside</em> a positive <code>startswith(root)</code> branch, keeping the trust boundary
+      explicit for review, static analysis and regression tests.</li>
     <li><strong>No command injection surface.</strong> The game launcher runs a fixed Steam/Frontier command;
       user input never reaches a shell.</li>
     <li><strong>Supply-chain pinning.</strong> Runtime dependencies are version-pinned; GitHub Actions are pinned to
@@ -896,9 +902,11 @@ footer.colophon {
 <!-- ============================================================ -->
 <section id="s07">
   <div class="sec-head"><span class="code">07</span><h2>Frontend</h2></div>
-  <p>The UI is a single page of hand-written, framework-free JavaScript (<code>ui/app.js</code>, ~7,300 lines),
-  one HTML document and one stylesheet. No build step, no bundler, no npm tree: the server serves the files from
-  disk, which also means UI changes appear on refresh during development. The same document renders two layouts:</p>
+  <p>The browser application is <strong>134 native ES modules</strong> (20,895 physical lines) behind a
+  21-line HTML shell. It remains framework-free and zero-build: Flask serves the source graph directly and
+  PyInstaller packages it recursively. There are no runtime packages, generated bundles, CDN assets or
+  transpilation step; npm is used only for pinned development gates. The same application state renders two
+  layouts:</p>
 
   <h3>Flight panel mode <span class="mono-tag">— default</span></h3>
   <p>A touch cockpit for a tablet: a 100&nbsp;px icon rail navigates <strong>12 pages</strong> (STATUS, TRADE,
@@ -911,22 +919,26 @@ footer.colophon {
   <p>The same cards in an 11-tab layout for keyboard-and-mouse use, hosted either in any browser or in the
   pywebview desktop window.</p>
 
-  <h3>Client architecture</h3>
+  <h3>Module and state architecture</h3>
   <dl class="kv">
-    <dt>State sync</dt><dd>One <code>poll()</code> loop fetches <code>/api/state</code> every 1.5 s; render functions diff against signatures so cards only rebuild when their data changed (signatures exclude per-event timestamps — a hard-won rule)</dd>
-    <dt>Device prefs</dt><dd>localStorage, commander-scoped keys where data is per-profile (<code>activeRoute:v2:&lt;id&gt;</code>): theme accent, card order/visibility per page, panel vs desktop, voice, display scales, persisted search forms</dd>
-    <dt>Search UX</dt><dd>Cached-result column sorting (shared <code>sortedRows</code>/<code>bumpSort</code> helpers), 150 ms-debounced autocomplete datalists fed by <code>/api/suggest</code>, recents floated first, near-system overrides</dd>
-    <dt>Alerts &amp; voice</dt><dd>Id-sequenced one-shot alert queue (high-water mark adopted on first poll so backlogs never replay); speech via server-side Piper with browser TTS fallback</dd>
-    <dt>Theming</dt><dd>Accent-only theming through CSS custom properties (<code>--accent-rgb</code> triplets, not color-mix, for older tablets); 6 presets + custom picker</dd>
-    <dt>Accessibility</dt><dd>ARIA roles on tab rails and progress meters, keyboard arrow navigation on switches, <code>prefers-reduced-motion</code> honored, focus rings throughout</dd>
+    <dt>Composition</dt><dd><code>src/main.js</code> is a bootstrap-only entrypoint. Named modules under <code>bootstrap/</code> mount views, wire controls, coordinate state and start polling; they do not own feature DOM selectors or listeners.</dd>
+    <dt>Application state</dt><dd><code>core/store.js</code> owns one typed <code>ApplicationState</code> snapshot. Features subscribe to complete snapshots and keep mutable workspace state in narrow feature-owned modules rather than ambient globals.</dd>
+    <dt>Transport</dt><dd>Twelve named domain clients import explicit request/response contracts. Only <code>core/http.js</code> may call <code>fetch()</code>; presentation code cannot embed API paths or import the transport directly.</dd>
+    <dt>Commander handoff</dt><dd>Scoped requests capture the stable commander ID plus store generation, send <code>X-Frameshift-Commander</code>, abort on profile change, and reject stale responses before feature state can be committed.</dd>
+    <dt>Safe rendering</dt><dd>Escaping <code>html&#96;…&#96;</code> templates and one reviewed <code>render()</code> boundary own dynamic markup. Direct HTML sinks are prohibited; runtime values use escaped templates, text nodes or typed DOM helpers.</dd>
+    <dt>Feature ownership</dt><dd><code>features/</code> owns domain behavior, <code>features/views/</code> owns static panes, <code>features/controls/</code> owns idempotent listener wiring, and <code>shell/</code> owns the desktop/Panel presentations.</dd>
+    <dt>CSS graph</dt><dd>Twenty-six split sheets plus the reusable Holo Button component load through one entrypoint with declared layers: reset → tokens → base → components → features → panel → themes → motion. Every split sheet stays under 400 lines.</dd>
+    <dt>Performance</dt><dd>The shipped graph is 134 modules and 462 relative import edges with zero cycles. CI budgets module count, total JS/CSS/HTML bytes and the largest individual module for tablet startup.</dd>
   </dl>
 
   <div class="callout">
-    <div class="c-label">Why no framework</div>
-    <p>The UI's hard requirements are: instant load on a mid-range tablet, offline-tolerant operation against one
-    polled endpoint, and zero build tooling for contributors. A 7 k-line vanilla bundle with explicit render
-    functions meets all three; the discipline that replaces the framework is the signature-diff render pattern and
-    module-sized sections within one file.</p>
+    <div class="c-label">Enforced dependency direction</div>
+    <p><code>core/data ← api ← features/shell ← bootstrap ← main</code>. Features and shell share one
+    presentation rank; every relative import is resolved and classified, and the 462-edge graph must remain
+    acyclic. Strict TypeScript <code>checkJs</code>, explicit API contracts, safe rendering and browser-level
+    behavior tests provide the discipline without adding a framework or production build pipeline. The
+    <a href="https://github.com/TannerMidd/frameshift/blob/main/docs/UI_ARCHITECTURE.md">living UI architecture
+    contract</a> records the exact contribution rules.</p>
   </div>
 </section>
 
@@ -989,16 +1001,19 @@ footer.colophon {
 <section id="s10">
   <div class="sec-head"><span class="code">10</span><h2>Build &amp; release</h2></div>
   <p>Releases are cut by pushing a <code>v*</code> tag. Nothing is built by hand, and the pipeline will not
-  produce an executable from a failing test suite:</p>
+  produce an executable from a failing gate. The tag build repeats strict frontend checks, 113 Vitest cases,
+  16 Chromium/WebKit browser executions and all 55 isolated Python test scripts before it stamps the version.
+  After packaging, the executable must serve a coherent recursive ESM graph with the expected cache and version
+  headers before GitHub receives an asset:</p>
 
   <figure class="plate">
     <div class="svgwrap">
-    <svg viewBox="0 0 860 290" role="img" aria-label="Release pipeline: tag push runs tests, stamps the version, builds with PyInstaller, publishes dual-name checksummed assets; clients verify and swap">
+    <svg viewBox="0 0 860 290" role="img" aria-label="Release pipeline: tag push runs static, unit, browser and Python gates; stamps the version; builds with PyInstaller; smoke-tests the served module graph; then publishes dual-name checksummed assets. Clients verify and swap.">
       <text x="20" y="26" class="da" font-size="11" letter-spacing="2">GITHUB ACTIONS · ON TAG v*</text>
       <rect x="20" y="38" width="150" height="64" rx="3" class="box"/>
-      <text x="34" y="60" class="dt" font-size="11.5">Test suite</text>
-      <text x="34" y="76" class="dd" font-size="9.5">59 files, each in its</text>
-      <text x="34" y="90" class="dd" font-size="9.5">own process</text>
+      <text x="34" y="60" class="dt" font-size="11.5">Release gates</text>
+      <text x="34" y="76" class="dd" font-size="9.5">static + unit + browser</text>
+      <text x="34" y="90" class="dd" font-size="9.5">+ 55 Python scripts</text>
 
       <rect x="192" y="38" width="150" height="64" rx="3" class="box"/>
       <text x="206" y="60" class="dt" font-size="11.5">Stamp version</text>
@@ -1011,14 +1026,14 @@ footer.colophon {
       <text x="378" y="90" class="dd" font-size="9.5">UI + catalogs bundled</text>
 
       <rect x="536" y="38" width="150" height="64" rx="3" class="box"/>
-      <text x="550" y="60" class="dt" font-size="11.5">Publish assets</text>
-      <text x="550" y="76" class="dd" font-size="9.5">Frameshift.exe +</text>
-      <text x="550" y="90" class="dd" font-size="9.5">EliteTrader.exe + .sha256</text>
+      <text x="550" y="60" class="dt" font-size="11.5">Served smoke</text>
+      <text x="550" y="76" class="dd" font-size="9.5">recursive ESM graph +</text>
+      <text x="550" y="90" class="dd" font-size="9.5">cache/version contract</text>
 
       <rect x="708" y="38" width="132" height="64" rx="3" class="boxa"/>
-      <text x="722" y="60" class="dt" font-size="11.5">Release</text>
-      <text x="722" y="76" class="dd" font-size="9.5">notes from</text>
-      <text x="722" y="90" class="dd" font-size="9.5">RELEASE_NOTES.md</text>
+      <text x="722" y="60" class="dt" font-size="11.5">Publish</text>
+      <text x="722" y="76" class="dd" font-size="9.5">dual exe names +</text>
+      <text x="722" y="90" class="dd" font-size="9.5">SHA-256 + notes</text>
 
       <path d="M170 70 L192 70" class="wirea" stroke-width="1.5"/>
       <path d="M342 70 L364 70" class="wirea" stroke-width="1.5"/>
@@ -1061,8 +1076,8 @@ footer.colophon {
       <text x="20" y="282" class="dd" font-size="10.5">executables under both names, forever. Both CI workflows pin every GitHub Action to a commit SHA.</text>
     </svg>
     </div>
-    <figcaption><b>FIG 06</b> — DELIVERY PIPELINE. The same test gate also runs on every push and pull request
-    (test.yml) on both Windows and Ubuntu.</figcaption>
+    <figcaption><b>FIG 06</b> — DELIVERY PIPELINE. The full static, unit, browser and isolated-Python gate also
+    runs on every push and pull request (<code>test.yml</code>) on both Windows and Ubuntu.</figcaption>
   </figure>
 </section>
 
@@ -1070,29 +1085,38 @@ footer.colophon {
 <section id="s11">
   <div class="sec-head"><span class="code">11</span><h2>Quality engineering</h2></div>
 
-  <h3>Test suite <span class="mono-tag">59 files · ~7,800 LOC</span></h3>
-  <p>Tests are deliberately <strong>script-style</strong>: each file is a plain Python program that builds its own
-  fixtures (temp databases, synthetic journals, a live Flask test client) and asserts its contract, run in its own
-  process. That isolation is a rule, not an accident — shared-fixture frameworks false-failed on module-level state,
-  so CI runs every file separately and fails on any non-zero exit. Coverage clusters where the risk is:</p>
+  <h3>Layered test suite <span class="mono-tag">87 files · 3 runtimes</span></h3>
+  <p>Each test layer owns the behavior it can observe best. Python exercises backend state and persistence,
+  Vitest imports the real ESM modules against a lightweight DOM, and Playwright verifies complete desktop and
+  tablet journeys in actual browser engines.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Layer</th><th class="num">Files</th><th class="num">Executions</th><th>Contract</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">Python</td><td class="num">55</td><td class="num">isolated</td><td>Journal, database, API, security, migration and process lifecycle. Every script runs in a fresh process.</td></tr>
+      <tr><td class="mono">Vitest</td><td class="num">31</td><td class="num">113</td><td>Store, API clients, safe rendering, feature ownership, profile handoffs, accessibility and UI state.</td></tr>
+      <tr><td class="mono">Playwright</td><td class="num">1</td><td class="num">16</td><td>Full Chromium journeys plus tagged WebKit tablet coverage with an iPad Pro landscape profile.</td></tr>
+    </tbody>
+  </table></div>
+  <p>The Python runner parses each script, records every local <code>test_*</code> definition and fails if the
+  entrypoint did not actually call one. This preserves the application's required process isolation without
+  permitting silent test definitions.</p>
+
+  <h3>Risk-shaped coverage</h3>
   <ul>
     <li><strong>Journal interpretation</strong> — event handlers, bootstrap selection, recovery, rebuild progress, commander scoping and profile-repair regressions (the "48 unassigned rows" class of bug gets a permanent test).</li>
     <li><strong>Data integrity</strong> — ledger idempotency, migration rebuilds, EDDN schema validation against the official schemas, reseed swap safety.</li>
-    <li><strong>Security</strong> — pairing, scopes, host/origin checks, path confinement, updater verification.</li>
-    <li><strong>UI contracts</strong> — static token contracts pin markup/JS invariants; two <code>vm</code>-based
-      harnesses execute the real <code>app.js</code> against a fake DOM to verify browser-state scoping and the
-      startup-sequence DOM contract without a browser.</li>
+    <li><strong>Security and identity</strong> — pairing, scopes, host/origin checks, path confinement, updater verification, profile activation coherence and the 46-required/one-conditional commander-route policy.</li>
+    <li><strong>UI behavior</strong> — source modules are imported directly. Store generation, scoped requests, feature handoffs, escaping, focus behavior, reduced motion and the specialist/tablet paths are asserted as behavior rather than source-text tokens.</li>
   </ul>
 
-  <h3>Beyond the suite</h3>
+  <h3>Static and release gates</h3>
   <ul>
-    <li><strong>Playwright QA</strong> — feature work is verified against a live dev server with the real 1.5 GB
-      market database before release (headless Chromium, touch-event swipes for panel mode, network interception
-      for deterministic externals).</li>
-    <li><strong>CodeQL</strong> — GitHub code scanning runs on the repository and is held at <strong>zero alerts</strong>
-      as a release gate; the error-type and path-barrier conventions in §05/§06 exist to keep it provable.</li>
-    <li><strong>CI matrix</strong> — every push/PR compiles all sources, syntax-checks the JS bundle and runs the
-      suite on Windows <em>and</em> Ubuntu; the release job repeats the suite before building.</li>
+    <li><strong>Architecture</strong> — strict TypeScript <code>checkJs</code>, explicit API contracts, module-size limits, no legacy bridges or type exemptions, and no presentation-layer transport or unsafe DOM seam bypasses.</li>
+    <li><strong>Graph integrity</strong> — all 462 relative imports resolve, follow the permitted layer direction and form zero cycles; bare runtime package imports are rejected.</li>
+    <li><strong>UI budgets</strong> — DOM IDs, CSS layers/import order, module count, JS/CSS/HTML weight, formatting and lint rules are deterministic CI failures rather than review suggestions.</li>
+    <li><strong>Browser matrix</strong> — Chromium runs the complete journey suite; WebKit runs the tagged tablet path. Fixed locale, time zone, reduced motion and retained traces keep failures reproducible.</li>
+    <li><strong>Packaged smoke</strong> — the frozen executable must recursively serve its same-origin ESM graph with one stamped version, <code>no-cache</code> UI assets and <code>no-store</code> API state.</li>
+    <li><strong>CI matrix</strong> — every push/PR compiles Python and runs frontend, browser and isolated-Python gates on Windows <em>and</em> Ubuntu; the release job repeats them before building.</li>
     <li><strong>Profiling culture</strong> — performance work starts with py-spy on the live process (it attaches to
       the frozen exe), not with guesses; the two big wins (idle CPU ~51%→0%, cold start 6 min→39 s) both came from
       profiler evidence overturning the obvious suspects.</li>
@@ -1102,13 +1126,14 @@ footer.colophon {
 <!-- ============================================================ -->
 <section id="s12">
   <div class="sec-head"><span class="code">12</span><h2>Module reference</h2></div>
-  <p>Backend size distribution — the top of the list is exactly where you'd want the weight: interpreting the game,
-  serving the API, and owning the data.</p>
+  <p>The backend's 44 modules contain 20,240 physical lines concentrated around journal interpretation, HTTP
+  policy and local data. The frontend is intentionally distributed: 20,895 lines across 134 bounded modules
+  rather than one application file.</p>
 
-  <div class="bars" role="img" aria-label="Lines of code by module, largest first">
-    <div class="bar"><span class="bl">journal.py</span><span class="bt"><span class="bf" style="width:100%"></span></span><span class="bv">2,935</span></div>
-    <div class="bar"><span class="bl">server.py</span><span class="bt"><span class="bf" style="width:66%"></span></span><span class="bv">1,932</span></div>
-    <div class="bar"><span class="bl">marketdb.py</span><span class="bt"><span class="bf" style="width:43%"></span></span><span class="bv">1,256</span></div>
+  <div class="bars" role="img" aria-label="Backend module and frontend source-group physical line counts">
+    <div class="bar"><span class="bl">journal.py</span><span class="bt"><span class="bf" style="width:100%"></span></span><span class="bv">3,002</span></div>
+    <div class="bar"><span class="bl">server.py</span><span class="bt"><span class="bf" style="width:68%"></span></span><span class="bv">2,037</span></div>
+    <div class="bar"><span class="bl">marketdb.py</span><span class="bt"><span class="bf" style="width:42%"></span></span><span class="bv">1,272</span></div>
     <div class="bar"><span class="bl">eddn_upload.py</span><span class="bt"><span class="bf" style="width:38%"></span></span><span class="bv">1,105</span></div>
     <div class="bar"><span class="bl">routes.py</span><span class="bt"><span class="bf" style="width:30%"></span></span><span class="bv">888</span></div>
     <div class="bar"><span class="bl">commanderdb.py</span><span class="bt"><span class="bf" style="width:25%"></span></span><span class="bv">728</span></div>
@@ -1116,32 +1141,32 @@ footer.colophon {
     <div class="bar"><span class="bl">objectives.py</span><span class="bt"><span class="bf" style="width:24%"></span></span><span class="bv">698</span></div>
     <div class="bar"><span class="bl">operations.py</span><span class="bt"><span class="bf" style="width:22%"></span></span><span class="bv">633</span></div>
     <div class="bar"><span class="bl">eventledger.py</span><span class="bt"><span class="bf" style="width:21%"></span></span><span class="bv">620</span></div>
-    <div class="bar"><span class="bl">state.py</span><span class="bt"><span class="bf" style="width:21%"></span></span><span class="bv">603</span></div>
-    <div class="bar"><span class="bl">spansh.py</span><span class="bt"><span class="bf" style="width:20%"></span></span><span class="bv">582</span></div>
+    <div class="bar"><span class="bl">state.py</span><span class="bt"><span class="bf" style="width:20%"></span></span><span class="bv">612</span></div>
+    <div class="bar"><span class="bl">spansh.py</span><span class="bt"><span class="bf" style="width:20%"></span></span><span class="bv">586</span></div>
     <div class="bar"><span class="bl">exobiology.py</span><span class="bt"><span class="bf" style="width:19%"></span></span><span class="bv">561</span></div>
     <div class="bar"><span class="bl">updater.py</span><span class="bt"><span class="bf" style="width:18%"></span></span><span class="bv">533</span></div>
-    <div class="bar alt"><span class="bl">ui/app.js</span><span class="bt"><span class="bf" style="width:100%"></span></span><span class="bv">7,778</span></div>
-    <div class="bar alt"><span class="bl">ui/style.css</span><span class="bt"><span class="bf" style="width:40%"></span></span><span class="bv">3,086</span></div>
-    <div class="bar alt"><span class="bl">ui/index.html</span><span class="bt"><span class="bf" style="width:19%"></span></span><span class="bv">1,466</span></div>
+    <div class="bar alt"><span class="bl">ui/src · 134 modules</span><span class="bt"><span class="bf" style="width:100%"></span></span><span class="bv">20,895</span></div>
+    <div class="bar alt"><span class="bl">ui/styles · split CSS</span><span class="bt"><span class="bf" style="width:30%"></span></span><span class="bv">6,254</span></div>
+    <div class="bar alt"><span class="bl">ui/index.html · shell</span><span class="bt"><span class="bf" style="width:1%"></span></span><span class="bv">21</span></div>
   </div>
 
   <div class="table-wrap"><table>
     <thead><tr><th>Module</th><th class="num">LOC</th><th>Responsibility</th></tr></thead>
     <tbody>
       <tr class="tgroup"><td colspan="3">Game interface</td></tr>
-      <tr><td class="mono">journal.py</td><td class="num">2,935</td><td>Journal watcher: bootstrap replay, live tail, ~90 event handlers, status-file polling, game-process probe</td></tr>
+      <tr><td class="mono">journal.py</td><td class="num">3,002</td><td>Journal watcher: bootstrap replay, live tail, ~90 event handlers, status-file polling, game-process probe</td></tr>
       <tr><td class="mono">autoplot.py</td><td class="num">377</td><td>Galaxy-map keystroke driver with NavRoute verification</td></tr>
       <tr><td class="mono">bindings.py</td><td class="num">167</td><td>Reads the player's own keybinding files for autoplot</td></tr>
       <tr><td class="mono">launcher.py</td><td class="num">157</td><td>Game-running probe; Steam/Frontier launch (fixed command)</td></tr>
       <tr><td class="mono">flight.py</td><td class="num">218</td><td>Fuel/scoop planning, surface-distance math, jumponium recipes</td></tr>
       <tr class="tgroup"><td colspan="3">Server &amp; security</td></tr>
-      <tr><td class="mono">server.py</td><td class="num">1,932</td><td>Flask app: 87 endpoints, scope guard, host/origin checks, static UI</td></tr>
+      <tr><td class="mono">server.py</td><td class="num">2,037</td><td>Flask app: 89 API routes, commander policy, scope/host/origin checks, static UI</td></tr>
       <tr><td class="mono">security.py</td><td class="num">325</td><td>Pairing capabilities, device registry, scopes, rate limiter</td></tr>
       <tr><td class="mono">network.py</td><td class="num">313</td><td>LAN pairing URLs and QR provisioning</td></tr>
       <tr><td class="mono">errors.py</td><td class="num">—</td><td>User-facing error taxonomy (leak-proof responses)</td></tr>
       <tr><td class="mono">diagnostics.py</td><td class="num">218</td><td>Health probe; redacted support bundle</td></tr>
       <tr class="tgroup"><td colspan="3">Data &amp; market engine</td></tr>
-      <tr><td class="mono">marketdb.py</td><td class="num">1,256</td><td>market.db schema/queries, seed swap, profile administration</td></tr>
+      <tr><td class="mono">marketdb.py</td><td class="num">1,272</td><td>market.db schema/queries, seed swap, profile administration</td></tr>
       <tr><td class="mono">commanderdb.py</td><td class="num">728</td><td>commander.db schema, transactional migrations, profile repair</td></tr>
       <tr><td class="mono">eventledger.py</td><td class="num">620</td><td>Compressed journal history; replay primitives</td></tr>
       <tr><td class="mono">routes.py</td><td class="num">888</td><td>Local trade-loop/chain planner, commodity search, cargo recovery</td></tr>
@@ -1151,10 +1176,10 @@ footer.colophon {
       <tr class="tgroup"><td colspan="3">Community network</td></tr>
       <tr><td class="mono">eddn.py</td><td class="num">267</td><td>ZeroMQ commodity/3 listener → market.db</td></tr>
       <tr><td class="mono">eddn_upload.py</td><td class="num">1,105</td><td>Privacy-safe outbound EDDN schema builders</td></tr>
-      <tr><td class="mono">spansh.py</td><td class="num">582</td><td>Spansh API client (planners, dumps, station search)</td></tr>
+      <tr><td class="mono">spansh.py</td><td class="num">586</td><td>Spansh API client (planners, dumps, station search)</td></tr>
       <tr><td class="mono">updater.py</td><td class="num">533</td><td>Self-update: check, verify, swap, rollback</td></tr>
       <tr class="tgroup"><td colspan="3">Commander features</td></tr>
-      <tr><td class="mono">state.py</td><td class="num">603</td><td>Thread-safe live snapshot (AppState)</td></tr>
+      <tr><td class="mono">state.py</td><td class="num">612</td><td>Thread-safe live snapshot (AppState)</td></tr>
       <tr><td class="mono">objectives.py</td><td class="num">698</td><td>Objectives + rule-based, time-budgeted session planner</td></tr>
       <tr><td class="mono">operations.py</td><td class="num">633</td><td>Shared ops boards with deterministic JSON merging</td></tr>
       <tr><td class="mono">combatops.py / carrierops.py</td><td class="num">929</td><td>Combat session tracking; fleet-carrier planning &amp; upkeep runway</td></tr>
@@ -1171,15 +1196,44 @@ footer.colophon {
     </tbody>
   </table></div>
 
+  <h3>Frontend ownership map</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Source rank</th><th>Ownership</th><th>Enforced boundary</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">core/ · data/</td><td>Store, HTTP policy, safe templates, DOM/clipboard/format helpers and pure offline data</td><td>No presentation imports; data has no DOM, store or transport work</td></tr>
+      <tr><td class="mono">api/ · contracts/</td><td>Twelve named domain clients and explicit request, response and application-state types</td><td>Only the core transport calls fetch; public responses use named DTOs</td></tr>
+      <tr><td class="mono">features/</td><td>Domain behavior, module-private workspace state, dynamic renderers, static views and idempotent controls</td><td>No embedded API paths, direct transport imports or unsafe HTML sinks</td></tr>
+      <tr><td class="mono">shell/</td><td>Desktop tabs, Panel pages, shared cards, status, voice and presentation controls</td><td>Shares one presentation rank with features while the full graph stays acyclic</td></tr>
+      <tr><td class="mono">bootstrap/ · main.js</td><td>Composition, polling and initialization order</td><td>Named initializers only; bootstrap owns no feature element IDs or listeners</td></tr>
+      <tr><td class="mono">styles/</td><td>Tokens, base, components, features, Panel, themes and motion under one cascade entrypoint</td><td>Manifested import order, declared layers and 400-line sheet ceiling</td></tr>
+    </tbody>
+  </table></div>
+
   <h3>Repository map</h3>
   <pre class="block">frameshift/
 ├── app.py                  composition root (headless or windowed)
 ├── elite/                  backend package — 44 modules (table above)
 │   └── data/               bundled engineering catalog (gzip)
 ├── ui/                     frontend, served from disk — no build step
-│   ├── app.js · index.html · style.css
+│   ├── index.html          21-line document shell
+│   ├── panel-bootstrap.js  synchronous pre-paint Panel guard
+│   ├── hb.js               Holo Button interaction helper
+│   ├── src/
+│   │   ├── main.js         ESM entrypoint
+│   │   ├── core/ · data/
+│   │   ├── api/contracts/
+│   │   ├── features/       controls/ · views/ · domain modules
+│   │   └── shell/ · bootstrap/
+│   ├── styles/             layered CSS graph and single index.css
 │   └── fonts/              self-hosted Chakra Petch + IBM Plex Mono
-├── tests/                  59 script-style tests + 2 vm harnesses
+├── tests/
+│   ├── test_*.py           55 isolated backend scripts
+│   ├── unit/               Vitest modules (31 files total, incl. colocated)
+│   └── e2e/                Chromium + WebKit tablet journeys
+├── tools/                  architecture/CSS/DOM/performance gates,
+│                           isolated Python runner, served-graph verifier
+├── docs/                   living UI contract, completed plan, extension docs
+├── package.json            pinned frontend development and test tooling
 ├── packaging/              Windows version-resource template
 ├── .github/workflows/      test.yml (push/PR, 2 OSes) · release.yml (tags)
 └── data/ (runtime)         market.db · commander.db · security.json
@@ -1192,15 +1246,17 @@ footer.colophon {
   <dl class="kv">
     <dt>Repository</dt><dd><a href="https://github.com/TannerMidd/frameshift">github.com/TannerMidd/frameshift</a> — source, releases, issues</dd>
     <dt>Showcase</dt><dd><a href="https://tannermidd.github.io/frameshift/">tannermidd.github.io/frameshift</a> — feature tour with live screenshots</dd>
-    <dt>User docs</dt><dd><a href="https://github.com/TannerMidd/frameshift/wiki">Project wiki</a> — 16 pages: getting started, flight panel, trading, autoplot, pairing &amp; security, troubleshooting</dd>
+    <dt>User docs</dt><dd><a href="https://github.com/TannerMidd/frameshift/wiki">Project wiki</a> — getting started, flight panel, trading, autoplot, pairing, security and troubleshooting</dd>
+    <dt>UI architecture</dt><dd><a href="https://github.com/TannerMidd/frameshift/blob/main/docs/UI_ARCHITECTURE.md">Living contribution contract</a> — module ownership, request identity, safe rendering and enforced gates</dd>
+    <dt>Modernization record</dt><dd><a href="https://github.com/TannerMidd/frameshift/blob/main/docs/UI_ARCHITECTURE_PLAN.md">Completed implementation plan</a> — final decisions and acceptance criteria delivered in v2.5.0</dd>
     <dt>Downloads</dt><dd><a href="https://github.com/TannerMidd/frameshift/releases/latest">Latest release</a> — Windows one-file executable + SHA-256</dd>
-    <dt>This dossier</dt><dd>Generated from the v2.3.0 source tree; figures and counts are measured, not estimated</dd>
+    <dt>This dossier</dt><dd>Refreshed from the v2.5.0 source tree; figures and counts are measured, not estimated</dd>
   </dl>
 </section>
 
 <footer class="colophon">
   <span>FRAMESHIFT ENGINEERING DOSSIER · TD-01</span>
-  <span>REV v2.3.0 · 2026-07-14</span>
+  <span>REV v2.5.0 · 2026-07-18</span>
   <span>© 2026 Tanner Middleton · MIT</span>
   <span>o7</span>
 </footer>
