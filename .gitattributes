@@ -1,4 +1,14 @@
 * text=auto
+*.css text eol=lf
+*.cjs text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.mjs text eol=lf
 *.py text eol=lf
 *.sh text eol=lf
+*.ts text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
 *.bat text eol=crlf
