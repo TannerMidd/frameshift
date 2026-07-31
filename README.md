@@ -133,6 +133,12 @@ Advanced process adapters require explicit approval, and any content change
 returns them to pending review. Extensions need no hosted service, login, or
 API key. See [Extension API v1](docs/EXTENSIONS.md).
 
+The builder ships starter templates, including a **Raxxla Scanner** that arms a
+tripwire for Elite's oldest unsolved legend and flags the anomalies the hunt
+actually looks for. It pairs with a galaxy watch that reads system names off the
+live EDDN feed, so a watched system announces itself even when another commander
+is the one who reaches it. See [Extension API v1](docs/EXTENSIONS.md#galaxy-watch).
+
 ## Community ecosystem
 
 Frameshift depends on the Elite Dangerous community's open-data work:

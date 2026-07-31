@@ -6,7 +6,7 @@ import json
 import threading
 import zlib
 
-from . import marketdb
+from . import galaxywatch, marketdb
 
 RELAY = "tcp://eddn.edcd.io:9500"
 COMMODITY_SCHEMA = "https://eddn.edcd.io/schemas/commodity/3"
@@ -192,6 +192,15 @@ class EddnListener:
             return
         with self._lock:
             self.last_message_at = marketdb.utc_now_iso()
+        # Every schema on the relay passes through here and all but commodity/3
+        # is dropped below, so the galaxy-wide name tripwire reads the message
+        # while it is already decoded. Legacy-galaxy traffic is a frozen fork of
+        # the universe and is excluded, matching how its prices are handled.
+        try:
+            if not self._is_legacy(envelope.get("header")):
+                galaxywatch.observe(envelope)
+        except Exception:
+            pass  # the tripwire must never break market ingestion
         if envelope.get("$schemaRef") != COMMODITY_SCHEMA:
             return
         if self._is_legacy(envelope.get("header")):

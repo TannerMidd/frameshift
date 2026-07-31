@@ -44,6 +44,27 @@ Supported permissions are:
 
 Conditions support exact values or `exists`, `eq`, `in`, `min` and `max`.
 Actions can interpolate journal values with `{Field}` or `{Nested.Field}`.
+All comparisons are exact and case-sensitive; there is no substring operator,
+so match a whole field value (use `in` to list spellings) rather than a
+fragment of one.
+
+## Galaxy watch
+
+An extension only ever sees your own journal. The galaxy watch covers the other
+case: it reads system names off the live EDDN feed, so a watched system raises
+a cockpit alert even when a different commander is the one who reaches it.
+
+It is configured by the `galaxy_watch_systems` setting, a list of system names
+that defaults to `["Raxxla"]`:
+
+```json
+{"galaxy_watch_systems": ["Raxxla", "Merope"]}
+```
+
+Each name fires at most once per run, and the Local Health line shows what is
+being watched. Only game-assigned system names are read — never station or
+fleet-carrier names, which commanders choose themselves and could otherwise be
+used to trigger the alert for everyone. Legacy-galaxy traffic is ignored.
 
 ## Process adapters
 

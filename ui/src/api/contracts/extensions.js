@@ -92,6 +92,8 @@
  *   sqlite_integrity?: string,
  *   eddn?: JsonObject,
  *   eddn_error?: string,
+ *   galaxy_watch?: {watching: string[], fired: string[], messages_checked: number},
+ *   galaxy_watch_error?: string,
  *   extensions?: ExtensionSnapshot,
  *   extensions_error?: string,
  * }} DiagnosticsHealthResponse

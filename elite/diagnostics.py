@@ -104,6 +104,12 @@ def health_snapshot() -> dict[str, Any]:
         log_exception(logger, "health: eddn listener", exc)
         result["eddn_error"] = type(exc).__name__
     try:
+        from . import galaxywatch
+        result["galaxy_watch"] = galaxywatch.stats()
+    except Exception as exc:
+        log_exception(logger, "health: galaxy watch", exc)
+        result["galaxy_watch_error"] = type(exc).__name__
+    try:
         from .extensions import EXTENSIONS
         result["extensions"] = EXTENSIONS.snapshot()
     except Exception as exc:

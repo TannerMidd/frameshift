@@ -55,9 +55,20 @@ function renderLocalHealth(health) {
   const integrity =
     health.sqlite_integrity || (health.market_database_error ? "unavailable" : "unknown");
   const markets = database.markets;
+  const watch = health.galaxy_watch;
+  const watching = watch?.watching || [];
+  const fired = watch?.fired || [];
+  // The galaxy watch is silent by design and may never fire, so the health
+  // line is the only place it can show that it is actually running.
+  const watchText = fired.length
+    ? ` · GALAXY WATCH HIT: ${fired.join(", ")}`
+    : watching.length
+      ? ` · watching ${watching.join(", ")} across EDDN`
+      : "";
   element("local-health").textContent =
     `Frameshift ${health.version || "?"} · database ${integrity}` +
     `${markets != null ? ` · ${Number(markets).toLocaleString()} markets` : ""}` +
+    watchText +
     " · logs rotate locally";
 }
 

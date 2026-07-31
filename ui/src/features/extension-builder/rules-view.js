@@ -109,7 +109,7 @@ export function renderBuilderRules(wrap, model) {
           ${fields.map((field) => html`<option value="${field}"></option>`)}
         </datalist>
         <button type="button" class="hb hb-utility hb-sm" data-xb="cond-add" data-ri="${ruleIndex}">
-          ï¼‹ CONDITION
+          ＋ CONDITION
         </button>
         <div class="xb-row">
           <span class="xb-kw">THEN</span>

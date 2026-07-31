@@ -28,6 +28,9 @@ DEFAULTS = {
     "exclude_surface": False,   # keep planetary/settlement stations out
     "journal_dir": "",          # manual journal folder; "" = auto-detect
     "pinned_blueprints": [],    # engineering planner pins: [{"name", "grade"}]
+    # System names to watch for across the whole EDDN feed, not just your own
+    # journal. Elite's oldest unsolved legend is the default; see galaxywatch.
+    "galaxy_watch_systems": ["Raxxla"],
     "tts_voice": "en_GB-cori-high",  # neural callout voice (see tts.VOICES)
 }
 

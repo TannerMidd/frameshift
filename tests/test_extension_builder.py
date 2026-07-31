@@ -228,5 +228,140 @@ assert "big-bounty" not in {item["id"] for item in resp.get_json()["loaded"]}
 resp = client.delete("/api/extensions/big-bounty")
 assert resp.status_code == 400
 
+# --- shipped "Raxxla Scanner" template ---------------------------------------
+# Byte-for-byte what the builder emits for the shipped template defined in the
+# frontend extension-builder catalog module. The JS unit tests prove the UI
+# compiles to this manifest; this proves the host accepts it and that every rule
+# actually matches a real journal event. A template whose conditions never fire
+# is worse than no template, because it looks like it is working.
+RAXXLA = {
+    "id": "raxxla-scanner",
+    "api_version": 1,
+    "name": "Raxxla Scanner",
+    "version": "1",
+    "permissions": ["read:journal", "emit:alert"],
+    "rules": [
+        {
+            "event": "FSDJump",
+            "action": {
+                "type": "alert",
+                "text": "RAXXLA — you have jumped into {StarSystem}. Record everything.",
+                "level": "critical",
+                "code": "user.raxxla-scanner",
+                "say": "RAXXLA — you have jumped into {StarSystem}. Record everything.",
+            },
+            "when": {"StarSystem": {"in": ["Raxxla", "RAXXLA"]}},
+        },
+        {
+            "event": "Location",
+            "action": {
+                "type": "alert",
+                "text": "RAXXLA — you are in {StarSystem}, at {Body}. Record everything.",
+                "level": "critical",
+                "code": "user.raxxla-scanner",
+                "say": "RAXXLA — you are in {StarSystem}, at {Body}. Record everything.",
+            },
+            "when": {"StarSystem": {"in": ["Raxxla", "RAXXLA"]}},
+        },
+        {
+            "event": "Scan",
+            "action": {
+                "type": "alert",
+                "text": "Undiscovered black hole {BodyName} — nobody has scanned it before.",
+                "level": "warn",
+                "code": "user.raxxla-scanner",
+                "say": "Undiscovered black hole {BodyName}.",
+            },
+            "when": {"StarType": {"eq": "H"}, "WasDiscovered": {"eq": False}},
+        },
+        {
+            "event": "CodexEntry",
+            "action": {
+                "type": "alert",
+                "text": "Codex anomaly in {System}: {Name_Localised}.",
+                "level": "warn",
+                "code": "user.raxxla-scanner",
+            },
+            "when": {
+                "SubCategory": {"eq": "$Codex_SubCategory_Geology_and_Anomalies;"},
+                "IsNewEntry": {"exists": True},
+            },
+        },
+        {
+            "event": "Scan",
+            "action": {
+                "type": "alert",
+                "text": "First-discovery Earth-like: {BodyName}.",
+                "level": "info",
+                "code": "user.raxxla-scanner",
+            },
+            "when": {"PlanetClass": {"eq": "Earthlike body"}, "WasDiscovered": {"eq": False}},
+        },
+    ],
+}
+
+snapshot = MANAGER.save_declarative(dict(RAXXLA))
+raxxla = {item["id"]: item for item in snapshot["loaded"]}["raxxla-scanner"]
+assert raxxla["mode"] == "declarative", raxxla
+assert raxxla["editable"] is True
+assert raxxla["rules"] == 5, raxxla
+assert raxxla["permissions"] == ["emit:alert", "read:journal"], raxxla
+
+# Each rule against the journal shape that is supposed to trigger it. Field
+# names and enum values below were taken from real recorded events, not guessed.
+TRIPWIRE_EVENTS = [
+    ({"event": "FSDJump", "StarSystem": "Raxxla", "JumpDist": 12.3}, 1, "critical"),
+    ({"event": "FSDJump", "StarSystem": "RAXXLA"}, 1, "critical"),
+    ({"event": "Location", "StarSystem": "Raxxla", "Body": "Raxxla A 1"}, 2, "critical"),
+    (
+        {"event": "Scan", "BodyName": "Praea Euq QI-T d3-9 A",
+         "StarType": "H", "WasDiscovered": False},
+        3, "warn",
+    ),
+    (
+        {"event": "CodexEntry", "System": "Byeia Eurk NN-B d13-40",
+         "Name_Localised": "Lava Spout", "IsNewEntry": True,
+         "SubCategory": "$Codex_SubCategory_Geology_and_Anomalies;"},
+        4, "warn",
+    ),
+    (
+        {"event": "Scan", "BodyName": "Wregoe QC-D d12-0 3",
+         "PlanetClass": "Earthlike body", "WasDiscovered": False},
+        5, "info",
+    ),
+]
+for event, expected_rule, expected_level in TRIPWIRE_EVENTS:
+    result = dry_run_rules(RAXXLA, [{"event": event, "timestamp": "2026-07-31T00:00:00Z"}])
+    assert len(result["matches"]) == 1, (event, result)
+    match = result["matches"][0]
+    assert match["rule"] == expected_rule, (event, match)
+    assert match["action"]["level"] == expected_level, (event, match)
+    # Placeholders must resolve; a leftover "{" means a renamed journal field.
+    assert "{" not in match["action"]["text"], match
+
+# Near-misses must stay silent: a different system, a star that is not a black
+# hole, an already-discovered body, and a codex entry outside the anomaly
+# subcategory are all ordinary events a commander sees constantly.
+QUIET_EVENTS = [
+    {"event": "FSDJump", "StarSystem": "Raxxlar"},
+    {"event": "FSDJump", "StarSystem": "Sol"},
+    {"event": "Location", "StarSystem": "raxxla"},
+    {"event": "Scan", "BodyName": "X", "StarType": "H", "WasDiscovered": True},
+    {"event": "Scan", "BodyName": "X", "StarType": "M", "WasDiscovered": False},
+    {"event": "Scan", "BodyName": "X", "PlanetClass": "Earthlike body", "WasDiscovered": True},
+    {"event": "CodexEntry", "System": "S", "IsNewEntry": True,
+     "SubCategory": "$Codex_SubCategory_Stars;"},
+    {"event": "CodexEntry", "System": "S",
+     "SubCategory": "$Codex_SubCategory_Geology_and_Anomalies;"},
+]
+quiet = dry_run_rules(
+    RAXXLA, [{"event": event, "timestamp": "2026-07-31T00:00:00Z"} for event in QUIET_EVENTS])
+assert quiet["scanned"] == len(QUIET_EVENTS), quiet
+assert quiet["matches"] == [], quiet
+
+resp = client.delete("/api/extensions/raxxla-scanner")
+assert resp.status_code == 200
+
 shutil.rmtree(ROOT.parent, ignore_errors=True)
-print("extension builder OK: save/validate, edit round-trip, process-pack guardrails, dry run, HTTP surface")
+print("extension builder OK: save/validate, edit round-trip, process-pack guardrails, dry run, "
+      "Raxxla template fires and stays quiet, HTTP surface")

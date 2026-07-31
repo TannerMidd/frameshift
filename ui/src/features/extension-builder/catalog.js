@@ -6,6 +6,11 @@ export const XB_EVENTS = [
     fields: ["StarSystem", "JumpDist", "FuelLevel", "FuelUsed", "StarClass", "Population"],
   },
   {
+    id: "Location",
+    label: "Location (game start or arrival)",
+    fields: ["StarSystem", "Body", "Docked", "SystemAllegiance", "Population"],
+  },
+  {
     id: "Docked",
     label: "Docked at a station",
     fields: ["StationName", "StarSystem", "StationType", "DistFromStarLS"],
@@ -31,9 +36,36 @@ export const XB_EVENTS = [
   {
     id: "Scan",
     label: "Body scanned",
-    fields: ["BodyName", "WasDiscovered", "WasMapped", "PlanetClass", "TerraformState", "Landable"],
+    fields: [
+      "BodyName",
+      "WasDiscovered",
+      "WasMapped",
+      "PlanetClass",
+      "StarType",
+      "TerraformState",
+      "Landable",
+    ],
   },
   { id: "SAASignalsFound", label: "Surface signals found", fields: ["BodyName"] },
+  {
+    id: "CodexEntry",
+    label: "Codex entry recorded",
+    fields: [
+      "Name_Localised",
+      "Category_Localised",
+      "SubCategory",
+      "SubCategory_Localised",
+      "Region_Localised",
+      "System",
+      "BodyName",
+      "IsNewEntry",
+    ],
+  },
+  {
+    id: "FSSSignalDiscovered",
+    label: "Signal source detected",
+    fields: ["SignalName", "SignalName_Localised", "IsStation", "USSType"],
+  },
   {
     id: "ScanOrganic",
     label: "Organic scanned",
@@ -69,46 +101,128 @@ export const XB_TEMPLATES = [
   {
     label: "💰 Big bounty callout",
     name: "Big bounty callout",
-    rule: {
-      event: "Bounty",
-      conditions: [{ field: "Reward", op: "min", value: "100000" }],
-      action: { type: "alert", level: "info", text: "Bounty {Reward} cr — {Target}", voice: true },
-    },
+    rules: [
+      {
+        event: "Bounty",
+        conditions: [{ field: "Reward", op: "min", value: "100000" }],
+        action: {
+          type: "alert",
+          level: "info",
+          text: "Bounty {Reward} cr — {Target}",
+          voice: true,
+        },
+      },
+    ],
   },
   {
     label: "⛽ Low fuel after jump",
     name: "Low fuel after jump",
-    rule: {
-      event: "FSDJump",
-      conditions: [{ field: "FuelLevel", op: "max", value: "8" }],
-      action: {
-        type: "alert",
-        level: "warn",
-        text: "Fuel at {FuelLevel} t after jump — find a scoopable star",
-        voice: true,
+    rules: [
+      {
+        event: "FSDJump",
+        conditions: [{ field: "FuelLevel", op: "max", value: "8" }],
+        action: {
+          type: "alert",
+          level: "warn",
+          text: "Fuel at {FuelLevel} t after jump — find a scoopable star",
+          voice: true,
+        },
       },
-    },
+    ],
   },
   {
     label: "📦 Mission payout tracker",
     name: "Mission payout tracker",
-    rule: {
-      event: "MissionCompleted",
-      conditions: [{ field: "Reward", op: "min", value: "1000000" }],
-      action: { type: "alert", level: "info", text: "{Faction} paid {Reward} cr", voice: false },
-    },
+    rules: [
+      {
+        event: "MissionCompleted",
+        conditions: [{ field: "Reward", op: "min", value: "1000000" }],
+        action: { type: "alert", level: "info", text: "{Faction} paid {Reward} cr", voice: false },
+      },
+    ],
   },
   {
     label: "★ First-discovery follow-up",
     name: "First discovery follow-up",
-    rule: {
-      event: "Scan",
-      conditions: [{ field: "WasDiscovered", op: "eq", value: "false" }],
-      action: {
-        type: "objective",
-        title: "Map first discovery {BodyName}",
-        category: "exploration",
+    rules: [
+      {
+        event: "Scan",
+        conditions: [{ field: "WasDiscovered", op: "eq", value: "false" }],
+        action: {
+          type: "objective",
+          title: "Map first discovery {BodyName}",
+          category: "exploration",
+        },
       },
-    },
+    ],
+  },
+  {
+    // Raxxla is Elite's oldest unsolved legend: a world nobody has ever proven
+    // exists. Rules 1-2 are a tripwire that can only fire if it is real and you
+    // reach it; rules 3-5 are the lore's strongest physical tells, tuned against
+    // real journal history so they stay rare rather than chatty.
+    label: "🔭 Raxxla Scanner",
+    name: "Raxxla Scanner",
+    rules: [
+      {
+        event: "FSDJump",
+        conditions: [{ field: "StarSystem", op: "in", value: "Raxxla, RAXXLA" }],
+        action: {
+          type: "alert",
+          level: "critical",
+          text: "RAXXLA — you have jumped into {StarSystem}. Record everything.",
+          voice: true,
+        },
+      },
+      {
+        event: "Location",
+        conditions: [{ field: "StarSystem", op: "in", value: "Raxxla, RAXXLA" }],
+        action: {
+          type: "alert",
+          level: "critical",
+          text: "RAXXLA — you are in {StarSystem}, at {Body}. Record everything.",
+          voice: true,
+        },
+      },
+      {
+        event: "Scan",
+        conditions: [
+          { field: "StarType", op: "eq", value: "H" },
+          { field: "WasDiscovered", op: "eq", value: "false" },
+        ],
+        action: {
+          type: "alert",
+          level: "warn",
+          text: "Undiscovered black hole {BodyName} — nobody has scanned it before. The legend puts a world at one.",
+          voice: true,
+        },
+      },
+      {
+        event: "CodexEntry",
+        conditions: [
+          { field: "SubCategory", op: "eq", value: "$Codex_SubCategory_Geology_and_Anomalies;" },
+          { field: "IsNewEntry", op: "exists", value: "" },
+        ],
+        action: {
+          type: "alert",
+          level: "warn",
+          text: "Codex anomaly in {System}: {Name_Localised}. New to you — check whether it is new to anyone.",
+          voice: false,
+        },
+      },
+      {
+        event: "Scan",
+        conditions: [
+          { field: "PlanetClass", op: "eq", value: "Earthlike body" },
+          { field: "WasDiscovered", op: "eq", value: "false" },
+        ],
+        action: {
+          type: "alert",
+          level: "info",
+          text: "First-discovery Earth-like: {BodyName}. Raxxla is said to be one.",
+          voice: false,
+        },
+      },
+    ],
   },
 ];

@@ -185,7 +185,19 @@ def main():
         watcher = JournalWatcher(state)
         watcher.start()
 
+        from elite import galaxywatch
         from elite.eddn import LISTENER
+
+        # The EDDN feed carries every commander's travel, so a watched system
+        # name can surface there long before it reaches this commander's own
+        # journal. Wire the tripwire before the listener starts consuming.
+        galaxywatch.subscribe(lambda hit: state.push_alert(
+            "critical",
+            "galaxy-watch",
+            f"Galaxy watch. {hit['system']} has been reached.",
+            f"GALAXY WATCH — {hit['system']} just appeared on the live EDDN feed"
+            f" ({hit['event']}).",
+        ))
 
         listener = LISTENER
         listener.start()  # keeps the local market DB fresh; no-ops until seeded

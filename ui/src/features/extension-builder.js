@@ -267,7 +267,7 @@ export function initExtensionBuilder(options = {}) {
     if (!(chip instanceof HTMLElement)) return;
     const template = XB_TEMPLATES[Number(chip.dataset.template)];
     const seed = template
-      ? /** @type {BuilderSeed} */ ({ name: template.name, rules: [template.rule] })
+      ? /** @type {BuilderSeed} */ ({ name: template.name, rules: template.rules })
       : null;
     xbOpen(seed);
   });

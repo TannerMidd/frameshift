@@ -10,7 +10,11 @@ const apiClientExceptions = new Set(["errors.js", "index.js", "query.js"]);
 const forbiddenModuleNames = new Set(["legacy-base.js", "legacy-runtime.js"]);
 const forbiddenTransitionComment =
   /\b(?:generated\s+mechanical|mechanical(?:ly)?\s+(?:esm\s+)?(?:carve|split|transition)|feature\s+ownership\s+cleanup\s+follows|transitional\s+legacy\s+feature)\b/iu;
-const forbiddenMojibake = /[ÂÃâð�]/u;
+// Lead bytes of a UTF-8 sequence re-read as latin-1. The bare-character class
+// covers the C2/C3/E2/F0 ranges; the EF range needs its second byte too, so a
+// legitimate i-diaeresis (naïve) is not mistaken for corruption. EF BC/BD are
+// the fullwidth forms used by the ＋ buttons, EF BB is a stray BOM.
+const forbiddenMojibake = /[ÂÃâð�]|ï[¼½»]/u;
 
 /** @param {string} directory @param {string} suffix */
 function walk(directory, suffix) {
@@ -226,6 +230,14 @@ function runSelfTest() {
     [],
   );
   assert.deepEqual(
+    uiTextPolicyFailures("src/features/clean.js", 'export const label = "＋ CONDITION";\n'),
+    [],
+  );
+  assert.deepEqual(
+    uiTextPolicyFailures("src/features/clean.js", 'export const label = "naïve";\n'),
+    [],
+  );
+  assert.deepEqual(
     modulePolicyFailures(
       "api/widgets.js",
       '/** @import {WidgetResponse} from "./contracts/widgets.js" */\n' +
@@ -251,6 +263,12 @@ function runSelfTest() {
   );
   assert.deepEqual(
     uiTextPolicyFailures("src/features/bad.js", 'export const label = "Savingâ€¦";\n'),
+    ["ui/src/features/bad.js contains literal mojibake instead of valid Unicode text."],
+  );
+  // The fullwidth ＋ mangled this way shipped undetected once; EF-range lead
+  // bytes were the gap in the class above.
+  assert.deepEqual(
+    uiTextPolicyFailures("src/features/bad.js", 'export const label = "ï¼‹ CONDITION";\n'),
     ["ui/src/features/bad.js contains literal mojibake instead of valid Unicode text."],
   );
   expectFailure(
@@ -294,7 +312,7 @@ function runSelfTest() {
       "generic Promise",
     );
   }
-  process.stdout.write("UI architecture policy self-test OK: 16 zero-tolerance cases.\n");
+  process.stdout.write("UI architecture policy self-test OK: 19 zero-tolerance cases.\n");
 }
 
 if (process.argv.includes("--self-test")) {
