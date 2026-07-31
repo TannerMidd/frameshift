@@ -1,4 +1,4 @@
-/** @import {ApplicationState} from "../api/contracts/state.js" */
+/** @import {ApplicationState, BiologySpecies} from "../api/contracts/state.js" */
 import { requireById } from "../core/dom.js";
 import { fmtUnknownNumber } from "../core/fmt.js";
 import { clear, html, render } from "../core/html.js";
@@ -174,26 +174,33 @@ export function renderBio(
     // Only species somebody actually scanned are known. A body can carry more
     // signals than that, so say so rather than imply the list is the whole body.
     const unidentified = Math.max(0, (b.count || 0) - sampledList.length);
+    // Each detail line is assembled as one string rather than interleaved
+    // template chunks: the formatter is free to reflow a tagged template, and a
+    // line break landing between a number and its unit becomes real whitespace.
+    /** @param {BiologySpecies} s */
+    const speciesDetail = (s) =>
+      [
+        `${fmtNum(s.value)} cr`,
+        s.variant,
+        s.colony_m ? `${s.colony_m} m` : null,
+        `${s.sites} site${s.sites === 1 ? "" : "s"}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    const unidentifiedNote = `+${unidentified} signal${
+      unidentified === 1 ? "" : "s"
+    } nobody has identified yet`;
     const sampled = sampledList.length
       ? [
           ...sampledList.map(
             (s) =>
               html`<div class="community">
-                ◆ ${s.name}
-                <span class="sub"
-                  >${fmtUnknownNumber(s.value)} cr${s.variant ? ` · ${s.variant}` : ""}${
-                    s.colony_m ? ` · ${s.colony_m} m` : ""
-                  } · ${s.sites} site${s.sites === 1 ? "" : "s"}</span
-                >
+                ◆ ${s.name} <span class="sub">${speciesDetail(s)}</span>
               </div>`,
           ),
-          unidentified
-            ? html`<div class="sub">+${unidentified} signal${
-                unidentified === 1 ? "" : "s"
-              } nobody has identified yet</div>`
-            : "",
+          unidentified ? html`<div class="sub">${unidentifiedNote}</div>` : "",
           b.species_value && sampledList.length > 1
-            ? html`<div class="sub">full survey ≈${fmtUnknownNumber(b.species_value)} cr</div>`
+            ? html`<div class="sub">${`full survey ≈${fmtNum(b.species_value)} cr`}</div>`
             : "",
         ]
       : [];
