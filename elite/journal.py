@@ -816,7 +816,13 @@ class JournalWatcher:
             try:
                 from . import spansh
 
-                bodies = spansh.system_genuses(id64)
+                # Species first: the body search knows which species commanders
+                # actually scanned, so a body can be priced exactly instead of
+                # as a genus range. The dump is the fallback when it fails --
+                # None means the request failed, {} means no biology here.
+                bodies = spansh.system_bio(system)
+                if bodies is None:
+                    bodies = spansh.system_genuses(id64)
             except Exception:
                 return
             # Apply only if the player is still in that system.

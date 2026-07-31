@@ -6,12 +6,12 @@
  */
 export const bioView = String.raw`<div class="tabpane hidden" id="tab-bio">
     <section class="card" data-arr="biosignals">
-      <div class="label">BIO SIGNALS — CURRENT SYSTEM <span class="dim">◇ = genuses others already mapped (Spansh) · ★ = undiscovered body, logs there pay 5× · values are estimates</span></div>
+      <div class="label">BIO SIGNALS — CURRENT SYSTEM <span class="dim">◆ = exact species someone already scanned, so its value is known · ◇ = genus only, so the value is a range · ★ = undiscovered body, logs there pay 5×</span></div>
       <div class="table-wrap">
         <table id="bio-table" class="hidden">
           <thead>
             <tr>
-              <th>Body</th><th class="num">Signals</th><th>Genuses (value · sample spacing)</th>
+              <th>Body</th><th class="num">Signals</th><th>Species / genuses (value · sample spacing)</th>
               <th>Body type</th><th class="num">Gravity</th><th class="num">Temp</th>
             </tr>
           </thead>

@@ -167,9 +167,39 @@ export function renderBio(
           >
         </div>`,
     );
+    // Exact species recorded by commanders who landed and scanned. This beats
+    // both your own map and the community genus list: a surface scan only ever
+    // reveals the genus, so a value range is the best either of those can do.
+    const sampledList = b.community_species || [];
+    // Only species somebody actually scanned are known. A body can carry more
+    // signals than that, so say so rather than imply the list is the whole body.
+    const unidentified = Math.max(0, (b.count || 0) - sampledList.length);
+    const sampled = sampledList.length
+      ? [
+          ...sampledList.map(
+            (s) =>
+              html`<div class="community">
+                ◆ ${s.name}
+                <span class="sub"
+                  >${fmtUnknownNumber(s.value)} cr${s.variant ? ` · ${s.variant}` : ""}${
+                    s.colony_m ? ` · ${s.colony_m} m` : ""
+                  } · ${s.sites} site${s.sites === 1 ? "" : "s"}</span
+                >
+              </div>`,
+          ),
+          unidentified
+            ? html`<div class="sub">+${unidentified} signal${
+                unidentified === 1 ? "" : "s"
+              } nobody has identified yet</div>`
+            : "",
+          b.species_value && sampledList.length > 1
+            ? html`<div class="sub">full survey ≈${fmtUnknownNumber(b.species_value)} cr</div>`
+            : "",
+        ]
+      : [];
     // Community-mapped genuses (Spansh) for bodies you haven't DSS'd yourself.
     const community =
-      !known.length && (b.community_genuses || []).length
+      !sampled.length && !known.length && (b.community_genuses || []).length
         ? (b.community_genuses?.map(
             (g) =>
               html`<div class="community">
@@ -182,7 +212,7 @@ export function renderBio(
           ) ?? [])
         : [];
     const predicted =
-      !known.length && !community.length && (b.predicted || []).length
+      !sampled.length && !known.length && !community.length && (b.predicted || []).length
         ? html`<div class="sub">
             predicted:
             ${b.predicted?.map(
@@ -192,6 +222,7 @@ export function renderBio(
           </div>`
         : "";
     const genuses =
+      (sampled.length && sampled) ||
       (known.length && known) ||
       (community.length && community) ||
       predicted ||

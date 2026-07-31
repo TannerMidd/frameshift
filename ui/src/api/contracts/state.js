@@ -62,10 +62,21 @@
  * }} BiologyGenus
  *
  * @typedef {{
+ *   name?: string,
+ *   genus?: string,
+ *   value?: number|null,
+ *   variant?: string|null,
+ *   colony_m?: number|null,
+ *   sites?: number,
+ * }} BiologySpecies
+ *
+ * @typedef {{
  *   body?: string,
  *   count?: number,
  *   genuses?: BiologyGenus[],
  *   community_genuses?: BiologyGenus[],
+ *   community_species?: BiologySpecies[],
+ *   species_value?: number|null,
  *   predicted?: BiologyGenus[],
  *   was_discovered?: boolean,
  *   landable?: boolean,

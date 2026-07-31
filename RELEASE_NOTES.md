@@ -1,62 +1,57 @@
-## Frameshift v2.7.0 — a tripwire for the oldest question in the galaxy
+## Frameshift v2.8.0 — exact species, not a guess
 
-Raxxla is Elite's longest-running unsolved legend: a world from the 1984
-original that has never been proven to exist. This release arms Frameshift to
-notice if that ever changes — from your own cockpit, and from the rest of the
-galaxy at once.
+The Explore bio table used to price a body as a range, because a surface map
+only ever reveals the *genus* — and a genus spans species worth wildly
+different amounts. Bacterium runs from 1.0M to 9.1M credits. That range was
+often the least useful thing on the row.
 
-### The Raxxla Scanner
+But other commanders have usually already landed there and scanned the actual
+species. Frameshift now reads that, so the row tells you what the body is
+really worth before you burn the fuel.
 
-**Settings → Extension Builder** ships a new starter template that fills in
-five rules and saves as an ordinary local extension pack you can edit or delete
-like any other:
+### Exact species where anyone has scanned
 
-- **Arrival tripwire.** Jumping into — or logging in inside — a system named
-  Raxxla raises a critical cockpit alert with a spoken callout.
-- **Undiscovered black hole.** A black hole nobody has scanned before, which is
-  where the legend has always pointed.
-- **New codex anomaly.** A geology-and-anomalies codex entry that is new to you,
-  so it is worth checking whether it is new to anyone.
-- **First-discovery Earth-like.** Raxxla is said to be one.
+Arrive in a system and bodies now show the precise species, its value, its
+colour variant, the sample spacing you need for the colony rule, and how many
+sites people have logged:
 
-The last three fire rarely by design. They were tuned against real recorded
-journal history rather than guesswork, so they stay quiet on an ordinary
-exploration run instead of crying wolf.
+```
+Col 285 Sector LH-A b15-3 B 1
+  ◆ Fonticulua Campestris  1,000,000 cr · Amethyst · 500 m · 3 sites
+  ◆ Bacterium Vesicula     1,000,000 cr · Gold · 500 m · 6 sites
+  full survey ≈2,000,000 cr
+```
 
-### Galaxy watch
+Previously that same row read `Fonticulua 1M–?` and `Bacterium 1M–9.1M` — a
+ceiling nine times the true value.
 
-An extension only ever sees your own journal. The galaxy watch covers the other
-case: it reads system names off the live EDDN feed Frameshift already listens
-to, so a watched system announces itself even when a different commander is the
-one who reaches it.
-
-- Watch any system, not just the default. Set `galaxy_watch_systems` in your
-  settings file to a list of names.
-- Each name alerts once per run, and the Local Health line shows what is being
-  watched so you can tell it is armed.
-- Only game-assigned system names are read — never station or fleet-carrier
-  names, which commanders choose themselves and could otherwise be used to
-  trigger the alert for everyone.
-
-### More to build with
-
-- The Extension Builder learned four new things to watch: **Location**,
-  **Codex entry recorded**, **Signal source detected**, and star type on
-  **Body scanned** — with the usual `{Field}` insert chips.
-- Templates can now carry more than one rule, which is what lets a single
-  button set up a whole scanner.
+- **`full survey`** totals what the body pays once every known species on it
+  is sampled, so you can judge a detour at a glance.
+- **Nothing is overstated.** Where commanders have identified fewer species
+  than the body has signals, the row says so — `+3 signals nobody has
+  identified yet` — rather than implying the list is the whole body.
+- **The genus range is still there** as the fallback, for bodies that have
+  been mapped but never actually visited. Roughly one body in twenty.
+- Your own scans still take precedence over anything community-sourced, and
+  species data is added even to bodies you mapped yourself — your surface
+  scan could only ever tell you the genus.
 
 ### Fixes
 
-- The **＋ CONDITION** button in the Extension Builder rendered as garbled
-  characters. The repository's own mojibake guard had a gap that let this
-  through; the guard now covers that range and the case is pinned by a test.
+- **Cactoida and Anemone lost their value ranges.** The two data sources name
+  genera differently, and these two slipped through the mapping to display as
+  an unpriced `Cactoids` / `Anemones`. Found by checking every genus name
+  across roughly 1,500 bodies rather than spot-checking a few.
+- **Geology is no longer mistaken for biology.** Geysers, lava spouts, crashed
+  ships, surface settlements and Thargoid sites all travel in the same list as
+  organics. They are now filtered out — which also correctly separates the
+  `Fumarole` geology marker from the `Fumerola` plant genus.
 
 ### Upgrade notes
 
 - Update normally from any 2.x release. No database schema changes and no
   manual migration steps.
-- The galaxy watch is on by default and costs nothing measurable: it reads
-  messages the EDDN listener already decodes and discards.
-- The Raxxla Scanner is opt-in — nothing is installed until you open the
-  Extension Builder and save it.
+- No extra work on arrival: this replaces the existing lookup rather than
+  adding a second one, and falls back to the old path if it ever fails.
+- Sample coordinates are deliberately not included. A well-surveyed body
+  carries hundreds of them, and they would bloat every state update.

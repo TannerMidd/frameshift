@@ -136,6 +136,10 @@ CODEX_GENUS = {
     # Space / Horizons-era organics
     "sphere": "Anemone", "vents": "Amphora Plant", "cone": "Bark Mounds",
     "brancae": "Brain Tree", "tube": "Sinuous Tubers",
+    # Spansh's body search reports bare plural stems rather than the codex
+    # token, and these two differ from the singular forms above. Without them
+    # they fall through to the Title-case guess and lose their value range.
+    "cactoids": "Cactoida", "anemones": "Anemone",
 }
 
 

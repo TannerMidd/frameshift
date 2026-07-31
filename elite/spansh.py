@@ -15,6 +15,109 @@ MAX_WAIT_SECONDS = 90
 BIO_SIGNAL = "$SAA_SignalType_Biological;"
 
 
+SYSTEM_BIO_MAX_BODIES = 60
+
+
+def _bio_species(landmarks):
+    """Distinct sampled species from a body's landmark list.
+
+    ``landmarks`` mixes organics with geology and points of interest -- Geyser,
+    Lava Spout, Crashed Ship, Surface Station, Thargoid -- so entries are kept
+    only when their ``type`` is a genus we know. That filter also separates the
+    "Fumarole" geology marker from the "Fumerola" plant genus.
+
+    Coordinates are deliberately dropped. A well-surveyed body carries a couple
+    of hundred landmarks, and this rides in the polled state snapshot.
+    """
+    species = {}
+    for mark in landmarks or []:
+        if not isinstance(mark, dict):
+            continue
+        genus = mark.get("type")
+        name = mark.get("subtype")
+        if not name or genus not in biovalues.GENUS_VALUE_RANGE:
+            continue
+        entry = species.get(name)
+        if entry is None:
+            entry = {
+                "name": name,
+                "genus": genus,
+                # Spansh's own figure is authoritative for a scanned species;
+                # our catalog is the fallback for anything it does not price.
+                "value": mark.get("value") or biovalues.species_value(name),
+                "variant": mark.get("variant"),
+                "colony_m": biovalues.GENUS_COLONY_M.get(genus),
+                "sites": 0,
+            }
+            species[name] = entry
+        entry["sites"] += 1
+    return sorted(species.values(), key=lambda s: -(s.get("value") or 0))
+
+
+def system_bio(system_name):
+    """Community biology for one system, species-level wherever anyone landed.
+
+    ``system_genuses`` reads the galaxy dump, which only records the *genus* a
+    surface map reveals -- so a body can only ever be priced as a range. The
+    body search additionally returns ``landmarks``: the exact species, variant
+    and value recorded by commanders who actually went down and scanned.
+
+    Returns ``{body: {"count", "genuses", "species", "species_value"}}``, or
+    ``None`` if the request failed -- an empty dict means the system genuinely
+    has no biology, and the two must not be confused by the caller.
+    """
+    if not system_name:
+        return None
+    payload = {
+        "filters": {
+            "system_name": {"value": [str(system_name)]},
+            "signals": [{"name": "Biological", "value": [1, 100]}],
+        },
+        "size": SYSTEM_BIO_MAX_BODIES,
+        "page": 0,
+    }
+    try:
+        resp = requests.post(
+            f"{BASE}/bodies/search", json=payload, headers=HEADERS, timeout=SUBMIT_TIMEOUT
+        )
+        if resp.status_code != 200:
+            return None
+        results = resp.json().get("results")
+    except (requests.RequestException, ValueError, TypeError):
+        return None
+    if not isinstance(results, list):
+        return None
+
+    out = {}
+    for body in results[:SYSTEM_BIO_MAX_BODIES]:
+        if not isinstance(body, dict) or not body.get("name"):
+            continue
+        count = None
+        for signal in body.get("signals") or []:
+            if isinstance(signal, dict) and signal.get("name") == "Biological":
+                count = signal.get("count")
+                break
+        genuses = []
+        for raw in body.get("genuses") or []:
+            stem = raw.get("name") if isinstance(raw, dict) else raw
+            name = biovalues.codex_genus_name(stem)
+            if name:
+                genuses.append(biovalues.genus_info(name))
+        species = _bio_species(body.get("landmarks"))
+        if not count and not genuses and not species:
+            continue
+        out[body["name"]] = {
+            "count": count,
+            "genuses": genuses,
+            "species": species,
+            # What a full survey of this body pays, once every species on it is
+            # known. Summed here rather than taken from Spansh's landmark_value,
+            # which also counts the non-organic markers filtered out above.
+            "species_value": sum(s.get("value") or 0 for s in species) or None,
+        }
+    return out
+
+
 def system_genuses(id64):
     """Community-mapped biological signals for a system, by id64, from the
     Spansh galaxy dump (GET /api/dump/<id64>). Returns

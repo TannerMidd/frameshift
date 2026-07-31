@@ -607,8 +607,15 @@ class AppState:
         for name, entry in self.bio_signals.items():
             e = dict(entry)
             cg = community.get(name)
-            if cg and not e.get("genuses"):
-                e["community_genuses"] = cg.get("genuses") or []
+            if cg:
+                if not e.get("genuses"):
+                    e["community_genuses"] = cg.get("genuses") or []
+                # Species is strictly more than your own map can tell you: a
+                # surface scan reveals the genus, never which species of it.
+                # Attach it even when you have your own genus data.
+                if cg.get("species"):
+                    e["community_species"] = cg["species"]
+                    e["species_value"] = cg.get("species_value")
             merged[name] = e
         for name, cg in community.items():
             if name in merged:
@@ -618,6 +625,8 @@ class AppState:
                 "count": cg.get("count"),
                 "genuses": [],
                 "community_genuses": cg.get("genuses") or [],
+                "community_species": cg.get("species") or [],
+                "species_value": cg.get("species_value"),
                 "source": "community",
             }
         return sorted(merged.values(), key=lambda b: -(b.get("count") or 0))
