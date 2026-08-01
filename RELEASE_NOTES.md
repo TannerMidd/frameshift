@@ -1,57 +1,78 @@
-## Frameshift v2.8.0 — exact species, not a guess
+## Frameshift v2.9.0 — where do I get Phosphorus?
 
-The Explore bio table used to price a body as a range, because a surface map
-only ever reveals the *genus* — and a genus spans species worth wildly
-different amounts. Bacterium runs from 1.0M to 9.1M credits. That range was
-often the least useful thing on the row.
+Frameshift already knew the answer. It just had no way to be asked.
 
-But other commanders have usually already landed there and scanned the actual
-species. Frameshift now reads that, so the row tells you what the body is
-really worth before you burn the fuel.
+The engineering catalog knew Phosphorus sits in the raw category 2 column, and
+knew the trade ratios — but only if you had already pinned a blueprint that
+happened to need it. The material-trader search existed, but behind a button in
+the workshop card, took no material name, and showed one result of the eight it
+fetched. And nobody could ask the obvious follow-up: *where do I go dig some up?*
 
-### Exact species where anyone has scanned
+The Engineering tab now has a **MATERIAL FINDER**. Type a name, get the answer.
 
-Arrive in a system and bodies now show the precise species, its value, its
-colour variant, the sample spacing you need for the colony rule, and how many
-sites people have logged:
+### The trade answer, instantly and offline
 
 ```
-Col 285 Sector LH-A b15-3 B 1
-  ◆ Fonticulua Campestris  1,000,000 cr · Amethyst · 500 m · 3 sites
-  ◆ Bacterium Vesicula     1,000,000 cr · Gold · 500 m · 6 sites
-  full survey ≈2,000,000 cr
+Phosphorus   raw · G1   Raw category 2 column
+
+TRADE FOR IT  at a raw material trader
+  1× Chromium    G2  →   3× Phosphorus
+  1× Molybdenum  G3  →   9× Phosphorus
+  1× Technetium  G4  →  27× Phosphorus
+
+WHERE IT DROPS  Surface prospecting; Mining; Mining (ice rings)
 ```
 
-Previously that same row read `Fonticulua 1M–?` and `Bacterium 1M–9.1M` — a
-ceiling nine times the true value.
+This appears as you type, with no network call — the trader columns ship with
+the catalog. It still answers with the game closed or Spansh unreachable.
 
-- **`full survey`** totals what the body pays once every known species on it
-  is sampled, so you can judge a detour at a glance.
-- **Nothing is overstated.** Where commanders have identified fewer species
-  than the body has signals, the row says so — `+3 signals nobody has
-  identified yet` — rather than implying the list is the whole body.
-- **The genus range is still there** as the fallback, for bodies that have
-  been mapped but never actually visited. Roughly one body in twenty.
-- Your own scans still take precedence over anything community-sourced, and
-  species data is added even to bodies you mapped yourself — your surface
-  scan could only ever tell you the genus.
+- **Every material, not just tradeable ones.** All 139 raw, manufactured and
+  encoded materials resolve. Guardian and Thargoid ones name their column and
+  say plainly that no trader will touch them, rather than coming back unknown.
+- **Trades are ordered by what you'd actually spend.** Trading down comes first,
+  nearest grade first. One Technetium buys 27 Phosphorus, but Technetium is far
+  harder to come by than the Chromium that buys three.
+- **The ratios are the planner's own.** The 6× up / 3× down maths is computed
+  once, server-side, by the same tested code the wishlist uses.
+
+### Where to prospect it
+
+For raw materials, Frameshift now finds the nearest landable bodies with a high
+surface concentration — sorted by distance, with a minimum concentration you
+control. Sitting in Cennicenino, the top result was a body in that same system
+at 16% Phosphorus, 0 ly away.
+
+Manufactured and encoded materials skip this section; they do not occur on
+surfaces, and the drop-source line above is the whole answer.
+
+### The nearest traders, all of them
+
+The trader search is now a proper sortable table of everything it finds —
+station, system, which kind it trades, jump distance, arrival distance and pad
+size — with a **Near** box to search from somewhere other than where you are.
+Leave the material blank and it lists all three trader kinds at once, which is
+what the workshop's **FIND TRADERS** button now does.
 
 ### Fixes
 
-- **Cactoida and Anemone lost their value ranges.** The two data sources name
-  genera differently, and these two slipped through the mapping to display as
-  an unpriced `Cactoids` / `Anemones`. Found by checking every genus name
-  across roughly 1,500 bodies rather than spot-checking a few.
-- **Geology is no longer mistaken for biology.** Geysers, lava spouts, crashed
-  ships, surface settlements and Thargoid sites all travel in the same list as
-  organics. They are now filtered out — which also correctly separates the
-  `Fumarole` geology marker from the `Fumerola` plant genus.
+- **Your materials now update when you trade.** The game's `MaterialTrade`
+  event was never handled, so trading at a trader left your inventory stale
+  until the next time you launched the game.
+- **The concentration floor is now real.** Spansh treats a minimum-share filter
+  as a suggestion — asked for 10%, it returns bodies as low as 8.3%. The floor
+  is enforced before the table is drawn, so the count matches the claim.
+- **Prospecting searches are roughly eight times faster.** The query filtered
+  for landable bodies, which excluded nothing — surface material shares only
+  exist on landable bodies in the first place — while costing most of the run
+  time. Removing it took the search from ~50s to ~6s.
+- **Trader searches deep in the black now explain themselves** instead of
+  failing oddly, matching how the other Spansh searches already behaved.
 
 ### Upgrade notes
 
-- Update normally from any 2.x release. No database schema changes and no
-  manual migration steps.
-- No extra work on arrival: this replaces the existing lookup rather than
-  adding a second one, and falls back to the old path if it ever fails.
-- Sample coordinates are deliberately not included. A well-surveyed body
-  carries hundreds of them, and they would bloat every state update.
+- Update normally from any 2.x release. No database changes, no migration.
+- The material field remembers what you last looked up; the **Near** box
+  deliberately does not, so a stale location never outlives a session.
+- Prospecting results come from bodies other commanders have already scanned,
+  so coverage is thinner far outside the bubble. The trade half is bundled and
+  always works.
