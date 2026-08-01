@@ -26,7 +26,8 @@ OPERATIONS_IMPORT_LIMIT = 20 * 1024 * 1024
 _LIVE_GALAXY_ENDPOINTS = {
     "/api/trade-route", "/api/commodity-search", "/api/mining",
     "/api/mining/hotspots", "/api/exobio-route", "/api/system-stations",
-    "/api/station-market", "/api/material-traders", "/api/sell-data",
+    "/api/station-market", "/api/material-traders", "/api/material-bodies",
+    "/api/sell-data",
     "/api/interstellar-factors", "/api/price-history", "/api/riches", "/api/neutron",
     "/api/station-search", "/api/cargo-sell", "/api/cargo-recovery",
     "/api/colonisation-sources", "/api/watch",
@@ -400,6 +401,7 @@ def create_app(state, security_manager=None):
             "/api/commodity-search": (60, 60),
             "/api/mining": (60, 60),
             "/api/mining/hotspots": (30, 60),
+            "/api/material-bodies": (30, 60),
             "/api/exobio-route": (30, 60),
             "/api/riches": (30, 60),
             "/api/neutron": (30, 60),
@@ -935,7 +937,8 @@ def create_app(state, security_manager=None):
         wishlist = blueprints.plan_wishlist(pinned, inventory)
         return jsonify({
             "commander_id": commander_id(),
-            "catalog": engineering_catalog.catalog_payload(),
+            "catalog": {**engineering_catalog.catalog_payload(),
+                        **blueprints.material_reference()},
             "wishlist": wishlist,
             "info": blueprints.BLUEPRINT_INFO,
             "rolls_per_grade": blueprints.ROLLS_PER_GRADE,
@@ -1358,6 +1361,35 @@ def create_app(state, security_manager=None):
         except spansh.SpanshError as exc:
             return error_response(exc, 502)
         return jsonify({"kind": kind.title(), "reference": ref, "traders": traders})
+
+    @app.get("/api/material-bodies")
+    @commander_scoped
+    def api_material_bodies():
+        """Nearest landable bodies to prospect one raw material on."""
+        from elite import blueprints
+
+        snap = request_state_snapshot()
+        ref = request.args.get("system") or snap.get("system")
+        try:
+            info = blueprints.material_info(request.args.get("material") or "")
+        except KeyError as exc:
+            return error_response(exc, 400)
+        if info["kind"] != "raw":
+            return jsonify({"error": f"{info['name']} is a {info['kind']} material. "
+                                     "Only raw materials are found on body surfaces."}), 400
+        try:
+            share = float(request.args.get("min_share") or 10)
+        except ValueError:
+            return jsonify({"error": "Minimum concentration must be a number."}), 400
+        try:
+            bodies = spansh.material_bodies(
+                ref, info["name"], min_share=max(0.0, min(100.0, share)),
+                coords=snap.get("star_pos"),
+            )
+        except spansh.SpanshError as exc:
+            return error_response(exc, 502)
+        return jsonify({"material": info["name"], "reference": ref,
+                        "min_share": share, "bodies": bodies})
 
     @app.get("/api/sell-data")
     @commander_scoped

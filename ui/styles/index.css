@@ -33,4 +33,5 @@
 @import url("./features/security-extensions.css") layer(features);
 @import url("./panel/hud-controls.css") layer(panel);
 @import url("./features/jump-sequence.css") layer(features);
+@import url("./features/material-finder.css") layer(features);
 @import url("../holo-buttons.css") layer(components);

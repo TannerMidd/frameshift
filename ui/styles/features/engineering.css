@@ -264,24 +264,6 @@
   padding: 4px 0 1px;
   line-height: 1.45;
 }
-.ep-trader {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  font-size: 14px;
-}
-.ep-trader b {
-  letter-spacing: 1px;
-  font-size: 12px;
-  color: var(--orange-soft);
-  min-width: 110px;
-}
-#engplan-traders:not(:empty) {
-  margin-top: 12px;
-  border-top: 1px solid var(--border);
-  padding-top: 7px;
-}
 @media (max-width: 1050px) {
   .engplan-form {
     grid-template-columns: repeat(3, minmax(0, 1fr));

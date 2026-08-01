@@ -34,4 +34,16 @@ describe("commander-scoped planning APIs", () => {
       scope: "commander",
     });
   });
+
+  it("scopes material-body prospecting searches to the active commander", async () => {
+    const client = clientStub();
+    const api = createEngineeringApi(client);
+
+    await api.findMaterialBodies("Phosphorus", "Sol", 12.5);
+
+    expect(client.json).toHaveBeenCalledWith(
+      "/api/material-bodies?material=Phosphorus&system=Sol&min_share=12.5",
+      { scope: "commander" },
+    );
+  });
 });

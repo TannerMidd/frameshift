@@ -4,6 +4,8 @@ const apiMocks = vi.hoisted(() => ({
   findDataSaleStations: vi.fn(),
   findExobiologyRoute: vi.fn(),
   findInterstellarFactors: vi.fn(),
+  findMaterialBodies: vi.fn(),
+  findMaterialTraders: vi.fn(),
   findMiningHotspots: vi.fn(),
   findMiningLocations: vi.fn(),
   planNeutronRoute: vi.fn(),
@@ -11,6 +13,13 @@ const apiMocks = vi.hoisted(() => ({
   searchCommodities: vi.fn(),
   searchStations: vi.fn(),
   getSystemStations: vi.fn(),
+}));
+
+vi.mock("../../ui/src/api/engineering.js", () => ({
+  engineeringApi: {
+    findMaterialBodies: apiMocks.findMaterialBodies,
+    findMaterialTraders: apiMocks.findMaterialTraders,
+  },
 }));
 
 vi.mock("../../ui/src/api/market.js", () => ({
@@ -51,6 +60,8 @@ import { StaleResponseError } from "../../ui/src/core/http.js";
 import { appStore } from "../../ui/src/core/store.js";
 import { searchCommodity } from "../../ui/src/features/commodities.js";
 import { searchExobio } from "../../ui/src/features/exobio.js";
+import { searchMaterialBodies } from "../../ui/src/features/material-bodies.js";
+import { searchMaterialTraders } from "../../ui/src/features/material-traders.js";
 import { searchMining, showHotspots } from "../../ui/src/features/mining.js";
 import { planNeutron, planRiches } from "../../ui/src/features/planners.js";
 import { findInterstellarFactors, findSellPoints } from "../../ui/src/features/services.js";
@@ -135,6 +146,15 @@ function mountDiscoveryForms() {
     <button id="ss-go"></button>
     <input id="ss-system" value="">
     <div id="ss-list"></div>
+
+    <div id="mf-status"></div>
+    <button id="mf-go"></button>
+    <div id="mf-traders-status"></div>
+    <div id="mf-traders-wrap"></div>
+    <table id="mf-traders-table"><thead></thead><tbody></tbody></table>
+    <div id="mf-bodies-status"></div>
+    <div id="mf-bodies-wrap"></div>
+    <table id="mf-bodies-table"><thead></thead><tbody></tbody></table>
   `;
 }
 
@@ -167,6 +187,9 @@ describe("snapshot-defaulted discovery handoffs", () => {
       planNeutron(submitEvent()),
       searchStations(submitEvent()),
       loadSystemStations(submitEvent()),
+      // One kind only: the shared mock yields a single deferred per call.
+      searchMaterialTraders({ kinds: ["raw"] }),
+      searchMaterialBodies({ material: "Phosphorus" }),
     ];
     const buttonIds = [
       "cs-go",
@@ -179,6 +202,7 @@ describe("snapshot-defaulted discovery handoffs", () => {
       "nr-go",
       "os-go",
       "ss-go",
+      "mf-go",
     ];
     for (const id of buttonIds) expect(document.getElementById(id).disabled).toBe(true);
 

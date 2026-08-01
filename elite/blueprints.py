@@ -37,6 +37,44 @@ _TRADER_FAMILIES = {
     },
 }
 
+# A material trader exchanges within one column only, one grade step at a time.
+TRADE_UP_COST = 6     # spend 6 of grade N to gain 1 of grade N+1
+TRADE_DOWN_YIELD = 3  # spend 1 of grade N to gain 3 of grade N-1
+
+TRADER_KINDS = ("raw", "manufactured", "encoded")
+
+# Catalog family identifiers are internal; these are the column names a
+# commander actually reads.  Guardian and Thargoid families are listed too, so
+# the UI can name the column it is refusing to trade rather than saying nothing.
+# Keyed by (kind, family): GuardianRuinsActive, ThargoidShip and ThargoidSite
+# each appear under two different kinds and must not be merged.
+_FAMILY_LABELS = {
+    **{("raw", f"Category{i}"): f"Raw category {i}" for i in range(1, 8)},
+    ("manufactured", "Alloys"): "Alloys",
+    ("manufactured", "Capacitors"): "Capacitors",
+    ("manufactured", "Chemical"): "Chemical",
+    ("manufactured", "Composite"): "Composite",
+    ("manufactured", "Conductive"): "Conductive",
+    ("manufactured", "Crystals"): "Crystals",
+    ("manufactured", "GuardianRuinsActive"): "Guardian ruins",
+    ("manufactured", "Heat"): "Heat",
+    ("manufactured", "MechanicalComponents"): "Mechanical components",
+    ("manufactured", "Shielding"): "Shielding",
+    ("manufactured", "ThargoidShip"): "Thargoid ships",
+    ("manufactured", "ThargoidSite"): "Thargoid structures",
+    ("manufactured", "Thermic"): "Thermic",
+    ("encoded", "DataArchives"): "Data archives",
+    ("encoded", "EmissionData"): "Emission data",
+    ("encoded", "EncodedFirmware"): "Encoded firmware",
+    ("encoded", "EncryptionFiles"): "Encryption files",
+    ("encoded", "GuardianRuins"): "Guardian obelisk data",
+    ("encoded", "GuardianRuinsActive"): "Guardian blueprint segments",
+    ("encoded", "ShieldData"): "Shield data",
+    ("encoded", "ThargoidShip"): "Thargoid ships",
+    ("encoded", "ThargoidSite"): "Thargoid structures",
+    ("encoded", "WakeScans"): "Wake scans",
+}
+
 
 def _all_groups():
     return catalog.load()["groups"]
@@ -195,6 +233,49 @@ def material_info(name):
     }
 
 
+def column_key(kind, family) -> str:
+    """Identify one material-trader column.  The kind is part of the key because
+    the Guardian and Thargoid families exist under more than one kind."""
+    return f"{kind}/{family}"
+
+
+def material_reference() -> dict:
+    """Every tradeable-kind material with the trader column it belongs to.
+
+    Sent to the browser with the catalog so 'where do I get Phosphorus' is
+    answered offline, without a round trip and without reimplementing the trade
+    ratios in JavaScript.
+    """
+    materials, columns = [], {}
+    for item in _all_materials():
+        kind = item.get("kind")
+        if kind not in TRADER_KINDS:
+            continue
+        info = material_info(item["symbol"])
+        family = info["family"]
+        materials.append({
+            "name": info["name"],
+            "symbol": info["symbol"],
+            "kind": kind,
+            "family": family,
+            "grade": info["grade"],
+            "tradeable": info["tradeable"],
+            "source": info["source"],
+        })
+        if family and column_key(kind, family) not in columns:
+            columns[column_key(kind, family)] = {
+                "label": _FAMILY_LABELS.get(
+                    (kind, family), f"{catalog.KIND_LABELS.get(kind, kind)} {family}"),
+                "tradeable": family in _TRADER_FAMILIES.get(kind, set()),
+            }
+    materials.sort(key=lambda row: row["name"])
+    return {
+        "materials": materials,
+        "material_columns": columns,
+        "trade_ratios": {"up": TRADE_UP_COST, "down": TRADE_DOWN_YIELD},
+    }
+
+
 def _recipe_steps(group, current_grade, target_grade, quantity=1, rolls=None):
     quantity = max(1, int(quantity or 1))
     kind = group["kind"]
@@ -292,16 +373,16 @@ def convertible(surplus, from_grade, to_grade):
     if surplus <= 0 or not from_grade or not to_grade:
         return 0
     if from_grade > to_grade:
-        return surplus * 3 ** (from_grade - to_grade)
+        return surplus * TRADE_DOWN_YIELD ** (from_grade - to_grade)
     if from_grade < to_grade:
-        return surplus // 6 ** (to_grade - from_grade)
+        return surplus // TRADE_UP_COST ** (to_grade - from_grade)
     return surplus
 
 
 def _cost_for(wanted, from_grade, to_grade):
     if from_grade > to_grade:
-        return math.ceil(wanted / (3 ** (from_grade - to_grade)))
-    return wanted * 6 ** (to_grade - from_grade)
+        return math.ceil(wanted / (TRADE_DOWN_YIELD ** (from_grade - to_grade)))
+    return wanted * TRADE_UP_COST ** (to_grade - from_grade)
 
 
 def _rows(need, inventory):

@@ -12,6 +12,9 @@ HEADERS = {"User-Agent": "Frameshift/2.0 (personal ED companion app)"}
 SUBMIT_TIMEOUT = 20
 POLL_TIMEOUT = 20
 MAX_WAIT_SECONDS = 90
+# Scanning surface material shares across the galaxy dump is inherently slower
+# than a station lookup: 10-30s is normal, so it gets its own ceiling.
+BODY_SEARCH_TIMEOUT = 45
 BIO_SIGNAL = "$SAA_SignalType_Biological;"
 
 
@@ -444,6 +447,8 @@ def service_stations(reference_system, service, size=8, coords=None):
 
 def material_traders(reference_system, kind, size=8, coords=None):
     """Nearest material traders of one kind ('Raw'|'Manufactured'|'Encoded')."""
+    if not reference_system and not (coords and len(coords) == 3):
+        raise SpanshError("No reference system known yet - is the game running?")
     body = {
         "filters": {"material_trader": {"value": [kind.title()]}},
         "sort": [{"distance": {"direction": "asc"}}],
@@ -451,16 +456,81 @@ def material_traders(reference_system, kind, size=8, coords=None):
         "page": 0,
         "reference_system": reference_system,
     }
+    if not reference_system:
+        body.pop("reference_system")
+        body["reference_coords"] = {"x": coords[0], "y": coords[1], "z": coords[2]}
     return [
         {
             "station": s.get("name"),
             "system": s.get("system_name"),
             "distance": round(s.get("distance") or 0, 1),
             "dist_ls": s.get("distance_to_arrival"),
+            "type": s.get("type"),
+            "carrier": (s.get("type") or "") == "Drake-Class Carrier",
             "large_pad": bool(s.get("has_large_pad")),
+            "updated_at": s.get("updated_at"),
         }
         for s in _stations_search(body, coords)
     ]
+
+
+def material_bodies(reference_system, material, min_share=10.0, size=20, coords=None):
+    """Nearest landable bodies to prospect one raw material on.
+
+    Only raw materials occur on body surfaces, so the caller must reject the
+    other kinds. Sorting is by distance with a minimum concentration floor
+    rather than by concentration: Spansh sorts material share galaxy-wide, which
+    answers 'the richest body in the galaxy' (tens of thousands of light years
+    away) instead of the question actually being asked.
+
+    Spansh treats the share floor as a hint, not a filter -- a request for 10%
+    comes back with bodies as low as 8% -- so the floor is enforced here and the
+    page is over-fetched to refill what that drops. Page size does not affect
+    the query's cost, so this is free.
+    """
+    if not reference_system and not (coords and len(coords) == 3):
+        raise SpanshError("No reference system known yet - is the game running?")
+    if not material:
+        raise SpanshError("No material given.")
+    payload = {
+        # No is_landable filter: surface material shares only exist on landable
+        # bodies, so it excludes nothing while costing 4-5x the query time.
+        "filters": {
+            "materials": [{"name": material, "value": {"min": float(min_share), "max": 100}}],
+        },
+        "sort": [{"distance": {"direction": "asc"}}],
+        "size": int(size) * 2,
+        "page": 0,
+        "reference_system": reference_system,
+    }
+    if not reference_system:
+        payload.pop("reference_system")
+        payload["reference_coords"] = {"x": coords[0], "y": coords[1], "z": coords[2]}
+    try:
+        resp = requests.post(f"{BASE}/bodies/search", json=payload, headers=HEADERS,
+                             timeout=BODY_SEARCH_TIMEOUT)
+    except requests.RequestException as exc:
+        raise SpanshError(f"Could not reach Spansh: {exc}") from exc
+    if resp.status_code >= 400:
+        raise SpanshError(_error_text(resp))
+    target = material.lower()
+    out = []
+    for b in resp.json().get("results") or []:
+        hit = next((m for m in b.get("materials") or []
+                    if (m.get("name") or "").lower() == target), None)
+        if not hit or (hit.get("share") or 0) < float(min_share):
+            continue
+        out.append({
+            "system": b.get("system_name"),
+            "body": b.get("name"),
+            "subtype": b.get("subtype"),
+            "share": round(hit.get("share") or 0, 1),
+            "distance": round(b.get("distance") or 0, 1),
+            "dist_ls": b.get("distance_to_arrival"),
+            "gravity": b.get("gravity"),
+        })
+    out.sort(key=lambda r: (r["distance"], -r["share"]))
+    return out[:int(size)]
 
 
 def neutron_route(from_system, to_system, jump_range, efficiency=60):

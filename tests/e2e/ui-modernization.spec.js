@@ -293,6 +293,37 @@ test("engineering catalog filters recipes and renders grade and material state",
   expect(pageErrors).toEqual([]);
 });
 
+test("material finder answers offline, then searches traders and prospecting sites", async ({
+  page,
+}) => {
+  const { api, pageErrors } = await bootDesktop(page);
+  await activateDesktopTab(page, "engineering");
+
+  // The column, the trades and the drop sources all resolve from the catalog
+  // payload already in the browser — typing must not touch the network.
+  await page.locator("#mf-material").fill("Phosphorus");
+  await expect(page.locator("#mf-answer")).toContainText("Raw category 2");
+  await expect(page.locator("#mf-answer")).toContainText("Chromium");
+  await expect(page.locator("#mf-answer")).toContainText("27×");
+  await expect(page.locator("#mf-answer")).toContainText("Mining (ice rings)");
+  expect(api.matching("GET", "/api/material-traders")).toHaveLength(0);
+  expect(api.matching("GET", "/api/material-bodies")).toHaveLength(0);
+
+  await page.locator("#mf-go").click();
+  await expect.poll(() => api.matching("GET", "/api/material-traders").length).toBe(1);
+  await expect.poll(() => api.matching("GET", "/api/material-bodies").length).toBe(1);
+  const traders = new URLSearchParams(api.matching("GET", "/api/material-traders")[0].search);
+  expect(traders.get("kind")).toBe("raw");
+  const bodies = new URLSearchParams(api.matching("GET", "/api/material-bodies")[0].search);
+  expect(bodies.get("material")).toBe("Phosphorus");
+  expect(bodies.get("min_share")).toBe("10");
+
+  await expect(page.locator("#mf-traders-table tbody")).toContainText("Jameson Memorial");
+  await expect(page.locator("#mf-bodies-table tbody")).toContainText("Enceladus");
+  await expect(page.locator("#mf-bodies-table tbody")).toContainText("11.5%");
+  expect(pageErrors).toEqual([]);
+});
+
 test("OPS objective submission sends planning fields to the local API", async ({ page }) => {
   const { api, pageErrors } = await bootDesktop(page);
   await activateDesktopTab(page, "ops");

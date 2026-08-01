@@ -150,6 +150,7 @@ export function initSuggest() {
     "ss-system",
     "cs-near",
     "mn-near",
+    "mf-near",
     "os-near",
     "ops-objective-system",
     "ops-board-objective-system",

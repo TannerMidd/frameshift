@@ -97,4 +97,38 @@ with tempfile.TemporaryDirectory() as td:
     assert len([a for a in state.snapshot()["alerts"] if a["code"] == "blueprint"]) == 1
 
 print("journal callout OK: fires once when the pinned climb completes")
+
+# ---------- MaterialTrade keeps the inventory honest after an exchange ----------
+
+with tempfile.TemporaryDirectory() as td:
+    state = AppState()
+    w = JournalWatcher(state, journal_dir=td)
+    w.handle_event({"timestamp": "t", "event": "Materials",
+                    "Raw": [{"Name": "phosphorus", "Count": 4},
+                            {"Name": "chromium", "Count": 10}],
+                    "Manufactured": [], "Encoded": []})
+
+    # Unlike MaterialCollected/Discarded, the traded halves are named
+    # Material/Quantity rather than Name/Count.  Trading one grade down pays 3:1.
+    w.handle_event({"timestamp": "t", "event": "MaterialTrade", "TraderType": "raw",
+                    "Paid": {"Material": "chromium", "Material_Localised": "Chromium",
+                             "Category": "Raw", "Quantity": 4},
+                    "Received": {"Material": "phosphorus", "Material_Localised": "Phosphorus",
+                                 "Category": "Raw", "Quantity": 12}})
+    raw_counts = {sym: m["count"] for sym, m in state.materials["Raw"].items()}
+    assert raw_counts == {"phosphorus": 16, "chromium": 6}, raw_counts
+
+    # Category is optional on either half; TraderType carries the same answer.
+    w.handle_event({"timestamp": "t", "event": "MaterialTrade", "TraderType": "Raw",
+                    "Paid": {"Material": "phosphorus", "Quantity": 16},
+                    "Received": {"Material": "molybdenum", "Quantity": 1}})
+    raw_counts = {sym: m["count"] for sym, m in state.materials["Raw"].items()}
+    assert raw_counts == {"chromium": 6, "molybdenum": 1}, raw_counts
+
+    # A malformed half is ignored rather than corrupting the other side.
+    w.handle_event({"timestamp": "t", "event": "MaterialTrade", "TraderType": "raw",
+                    "Paid": {"Quantity": 6}, "Received": {"Material": "chromium", "Quantity": 2}})
+    assert state.materials["Raw"]["chromium"]["count"] == 8, state.materials["Raw"]
+
+print("MaterialTrade OK: spends and receives land live, Category falls back to TraderType")
 print("ALL ENGINEERING TESTS PASSED")

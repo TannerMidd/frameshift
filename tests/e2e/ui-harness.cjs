@@ -258,6 +258,38 @@ async function installMockApi(page, options = {}) {
       case "/api/engineering":
         response = jsonResponse(clone(API_FIXTURES.engineering));
         break;
+      case "/api/material-traders":
+        response = jsonResponse({
+          kind: "Raw",
+          reference: "Shinrarta Dezhra",
+          traders: [
+            {
+              station: "Jameson Memorial",
+              system: "Shinrarta Dezhra",
+              distance: 0,
+              dist_ls: 325,
+              large_pad: true,
+            },
+          ],
+        });
+        break;
+      case "/api/material-bodies":
+        response = jsonResponse({
+          material: "Phosphorus",
+          reference: "Shinrarta Dezhra",
+          min_share: 10,
+          bodies: [
+            {
+              system: "Sol",
+              body: "Enceladus",
+              subtype: "Icy body",
+              share: 11.5,
+              distance: 65.2,
+              dist_ls: 4900,
+            },
+          ],
+        });
+        break;
       case "/api/specialists":
         response = jsonResponse(clone(API_FIXTURES.specialists));
         break;

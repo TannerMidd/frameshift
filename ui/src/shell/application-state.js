@@ -154,7 +154,7 @@ export function resetProfileWorkspaces(nextSnapshot) {
   loadActiveRoute(commanderId);
   loadGalaxyHistory(commanderId, commanderName || null);
   engineeringInventorySignature = null;
-  for (const id of ["engplan-summary", "engplan-list", "engplan-materials", "engplan-traders"]) {
+  for (const id of ["engplan-summary", "engplan-list", "engplan-materials", "mf-answer"]) {
     const element = byId(id);
     if (element) element.replaceChildren();
   }

@@ -1,7 +1,7 @@
 import { http } from "../core/http.js";
 import { withQuery } from "./query.js";
 
-/** @import {EngineeringPinRequest, EngineeringPinResponse, EngineeringWorkshopResponse, MaterialTradersResponse} from "./contracts/engineering.js" */
+/** @import {EngineeringPinRequest, EngineeringPinResponse, EngineeringWorkshopResponse, MaterialBodiesResponse, MaterialTradersResponse} from "./contracts/engineering.js" */
 
 /** @param {typeof http} [client] */
 export function createEngineeringApi(client = http) {
@@ -30,7 +30,25 @@ export function createEngineeringApi(client = http) {
     });
   }
 
-  return Object.freeze({ getWorkshop, setPinnedBlueprint, findMaterialTraders });
+  /**
+   * @param {string} material
+   * @param {string} [system]
+   * @param {string|number} [minShare]
+   * @returns {Promise<MaterialBodiesResponse>}
+   */
+  function findMaterialBodies(material, system, minShare) {
+    return client.json(
+      withQuery("/api/material-bodies", { material, system, min_share: minShare }),
+      { scope: "commander" },
+    );
+  }
+
+  return Object.freeze({
+    getWorkshop,
+    setPinnedBlueprint,
+    findMaterialTraders,
+    findMaterialBodies,
+  });
 }
 
 export const engineeringApi = createEngineeringApi();

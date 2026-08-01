@@ -116,4 +116,50 @@ assert all(row["trade"] is None for row in blueprints.plan(
     "guardian--guardian-fsd-booster", 0, {"metaalloys": 100}
 )["materials"] if row["kind"] == "commodity")
 
+# The material reference the browser resolves "where do I get Phosphorus" from,
+# entirely offline.  108 of the 139 raw/manufactured/encoded materials sit in a
+# real trader column; Guardian and Thargoid families are collected, never traded.
+reference = blueprints.material_reference()
+assert len(reference["materials"]) == 139
+assert sum(1 for row in reference["materials"] if row["tradeable"]) == 108
+assert len(reference["material_columns"]) == 30
+assert reference["trade_ratios"] == {"up": 6, "down": 3}
+assert all(row["source"] for row in reference["materials"])
+
+by_name = {row["name"]: row for row in reference["materials"]}
+phosphorus = by_name["Phosphorus"]
+assert phosphorus["kind"] == "raw" and phosphorus["family"] == "Category2"
+assert phosphorus["grade"] == 1 and phosphorus["tradeable"]
+column2 = sorted(
+    (row for row in reference["materials"]
+     if row["kind"] == "raw" and row["family"] == "Category2"),
+    key=lambda row: row["grade"],
+)
+assert [row["name"] for row in column2] == [
+    "Phosphorus", "Chromium", "Molybdenum", "Technetium"
+]
+
+# Column labels are what a commander reads, never the internal family id.
+labels = {key: value["label"] for key, value in reference["material_columns"].items()}
+assert labels[blueprints.column_key("raw", "Category2")] == "Raw category 2"
+assert labels[blueprints.column_key("manufactured", "MechanicalComponents")] == \
+    "Mechanical components"
+assert labels[blueprints.column_key("encoded", "WakeScans")] == "Wake scans"
+assert not any("Category2" in label or "WakeScans" in label for label in labels.values())
+
+# GuardianRuinsActive, ThargoidShip and ThargoidSite each exist under two kinds
+# and must stay separate columns rather than silently merging.
+for family in ("GuardianRuinsActive", "ThargoidShip", "ThargoidSite"):
+    manufactured = reference["material_columns"][blueprints.column_key("manufactured", family)]
+    encoded = reference["material_columns"][blueprints.column_key("encoded", family)]
+    assert not manufactured["tradeable"] and not encoded["tradeable"]
+assert not by_name["Sensor Fragment"]["tradeable"]
+assert not by_name["Pattern Beta Obelisk Data"]["tradeable"]
+
+# The shipped ratios must stay in step with the planner's own trade math.
+assert blueprints.convertible(1, 2, 1) == reference["trade_ratios"]["down"]
+assert blueprints._cost_for(1, 1, 2) == reference["trade_ratios"]["up"]
+assert blueprints.convertible(1, 4, 1) == reference["trade_ratios"]["down"] ** 3
+assert blueprints._cost_for(1, 1, 4) == reference["trade_ratios"]["up"] ** 3
+
 print("ALL COMPLETE ENGINEERING CATALOG TESTS PASSED")

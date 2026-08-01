@@ -1,0 +1,98 @@
+/* MATERIAL FINDER — "where do I get / trade for this material?" */
+
+#mf-form {
+  align-items: end;
+}
+.mf-material-field {
+  min-width: 260px;
+  flex: 2 1 260px;
+}
+#mf-minshare {
+  max-width: 110px;
+}
+
+#mf-answer:not(:empty) {
+  margin: 10px 0 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.mf-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 15px;
+}
+.mf-head b {
+  color: var(--orange-soft);
+  letter-spacing: 0.4px;
+}
+.mf-unknown {
+  padding: 4px 0;
+  line-height: 1.45;
+}
+
+.mf-trades {
+  margin-top: 9px;
+  line-height: 1.5;
+}
+.mf-trades .label {
+  margin-bottom: 4px;
+}
+.mf-trade-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 3px 0 3px 10px;
+  border-left: 2px solid var(--border);
+  font-size: 14px;
+}
+/* Trading down a grade multiplies what you get; trading up costs 6x a step. */
+.mf-trade-line.mf-down {
+  border-left-color: var(--good, #6c6);
+}
+.mf-trade-line.mf-up {
+  border-left-color: var(--border);
+  opacity: 0.8;
+}
+.mf-spend,
+.mf-gain {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.mf-gain {
+  color: var(--orange-soft);
+}
+.mf-arrow {
+  opacity: 0.55;
+  padding: 0 2px;
+}
+
+.mf-source {
+  margin-top: 10px;
+  max-width: 920px;
+  line-height: 1.45;
+  font-size: 14px;
+}
+.mf-source b {
+  letter-spacing: 1px;
+  font-size: 12px;
+  color: var(--orange-soft);
+  margin-right: 6px;
+}
+
+.mf-section-label {
+  margin: 14px 0 5px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.mf-kind-chip {
+  text-transform: capitalize;
+}
+
+@media (max-width: 1050px) {
+  .mf-material-field {
+    min-width: 100%;
+  }
+}

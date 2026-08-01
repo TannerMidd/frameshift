@@ -26,11 +26,34 @@
  * }} EngineeringCatalogStats
  *
  * @typedef {{
+ *   name: string,
+ *   symbol: string,
+ *   kind: string,
+ *   family?: string|null,
+ *   grade?: number|null,
+ *   tradeable: boolean,
+ *   source?: string,
+ * }} TradeableMaterial
+ *
+ * @typedef {{
+ *   label: string,
+ *   tradeable: boolean,
+ * }} MaterialColumn
+ *
+ * @typedef {{
+ *   up: number,
+ *   down: number,
+ * }} TradeRatios
+ *
+ * @typedef {{
  *   schema_version?: number,
  *   source?: string,
  *   stats: EngineeringCatalogStats,
  *   kind_labels: {[kind: string]: string},
  *   groups: EngineeringCatalogGroup[],
+ *   materials?: TradeableMaterial[],
+ *   material_columns?: {[key: string]: MaterialColumn},
+ *   trade_ratios?: TradeRatios,
  * }} EngineeringCatalog
  *
  * @typedef {{
@@ -116,7 +139,10 @@
  *   system: string,
  *   distance?: number,
  *   dist_ls?: number|null,
+ *   type?: string|null,
+ *   carrier?: boolean,
  *   large_pad?: boolean,
+ *   updated_at?: string|null,
  * }} MaterialTrader
  *
  * @typedef {{
@@ -124,6 +150,23 @@
  *   reference: string|null,
  *   traders: MaterialTrader[],
  * }} MaterialTradersResponse
+ *
+ * @typedef {{
+ *   system: string,
+ *   body: string,
+ *   subtype?: string|null,
+ *   share: number,
+ *   distance?: number,
+ *   dist_ls?: number|null,
+ *   gravity?: number|null,
+ * }} MaterialBody
+ *
+ * @typedef {{
+ *   material: string,
+ *   reference: string|null,
+ *   min_share: number,
+ *   bodies: MaterialBody[],
+ * }} MaterialBodiesResponse
  */
 
 export {};

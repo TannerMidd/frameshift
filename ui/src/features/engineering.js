@@ -14,8 +14,7 @@ import { appStore } from "../core/store.js";
 import { isStaleCommanderResponse } from "../api/errors.js";
 import { engineeringApi } from "../api/engineering.js";
 import { renderEngineeringPlans } from "./engineering-plans.js";
-
-export { clearEngineeringTraderSearch, findTraders } from "./engineering-traders.js";
+import { setMaterialReference } from "./material-finder.js";
 
 /** @type {EngineeringCatalogGroup[]} */
 export let engCatalog = [];
@@ -120,6 +119,7 @@ export async function loadEngineering() {
     engCatalog = (localCatalog.groups || []).filter((item) => !item.alias_of);
     engCatalogById = new Map(engCatalog.map((item) => [item.id, item]));
     engKindLabels = localCatalog.kind_labels || {};
+    setMaterialReference(localCatalog);
     const catalogStats = localCatalog.stats || {};
     fillEngineeringKinds(catalogStats);
     fillEngineeringCatalog();

@@ -4,13 +4,21 @@
     "groups": [
       {
         "id": "fsd-increased-range",
-        "display_name": "Frame Shift Drive · Increased Range",
+        "display_name": "Frame Shift Drive \u00b7 Increased Range",
         "module": "Frame Shift Drive",
         "name": "increased_range",
         "kind": "ship-engineering",
         "kind_label": "Ship engineering",
-        "grades": [1, 2, 3, 4, 5],
-        "engineers": ["Felicity Farseer"],
+        "grades": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "engineers": [
+          "Felicity Farseer"
+        ],
         "engineer_access": [
           {
             "name": "Felicity Farseer",
@@ -27,6 +35,54 @@
         "ship-engineering": 1
       },
       "recipes": 5
+    },
+    "materials": [
+      {
+        "name": "Chromium",
+        "symbol": "chromium",
+        "kind": "raw",
+        "family": "Category2",
+        "grade": 2,
+        "tradeable": true,
+        "source": "Surface prospecting; Mining"
+      },
+      {
+        "name": "Molybdenum",
+        "symbol": "molybdenum",
+        "kind": "raw",
+        "family": "Category2",
+        "grade": 3,
+        "tradeable": true,
+        "source": "Surface prospecting"
+      },
+      {
+        "name": "Phosphorus",
+        "symbol": "phosphorus",
+        "kind": "raw",
+        "family": "Category2",
+        "grade": 1,
+        "tradeable": true,
+        "source": "Surface prospecting; Mining; Mining (ice rings)"
+      },
+      {
+        "name": "Technetium",
+        "symbol": "technetium",
+        "kind": "raw",
+        "family": "Category2",
+        "grade": 4,
+        "tradeable": true,
+        "source": "Surface prospecting"
+      }
+    ],
+    "material_columns": {
+      "raw/Category2": {
+        "label": "Raw category 2",
+        "tradeable": true
+      }
+    },
+    "trade_ratios": {
+      "up": 6,
+      "down": 3
     }
   },
   "wishlist": {
@@ -35,7 +91,7 @@
         "id": "fsd-increased-range",
         "kind": "ship-engineering",
         "kind_label": "Ship engineering",
-        "blueprint": "Frame Shift Drive · Increased Range",
+        "blueprint": "Frame Shift Drive \u00b7 Increased Range",
         "current_grade": 2,
         "target_grade": 5,
         "quantity": 1,

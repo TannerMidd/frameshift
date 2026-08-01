@@ -56,7 +56,7 @@ export const engineeringView = String.raw`<div class="tabpane hidden" id="tab-en
           <input id="ep-quantity" type="number" min="1" max="99" value="1" inputmode="numeric">
         </label>
         <button type="submit" id="ep-pin" class="hb hb-primary" title="Add or update this item in the wishlist">ADD TO WISHLIST</button>
-        <button type="button" id="ep-traders" class="hb hb-utility" title="Find nearby raw, manufactured and encoded material traders">FIND TRADERS</button>
+        <button type="button" id="ep-traders" class="hb hb-utility" title="Jump to the material finder and list the nearest raw, manufactured and encoded traders">FIND TRADERS</button>
       </form>
       <div class="ep-picker-meta">
         <div class="dim" id="ep-match-count"></div>
@@ -65,8 +65,78 @@ export const engineeringView = String.raw`<div class="tabpane hidden" id="tab-en
       <div id="engplan-summary"></div>
       <div id="engplan-list"></div>
       <div id="engplan-materials"></div>
-      <div id="engplan-traders"></div>
     </section>
+
+    <section class="card" id="matfinder-card" data-arr="matfinder">
+      <div class="card-head">
+        <div class="label">MATERIAL FINDER <span class="dim">where to get it &middot; where to trade for it</span></div>
+      </div>
+      <details class="eng-help">
+        <summary>How material traders work</summary>
+        <p>A <b>material trader</b> swaps materials you have for materials you
+        want &mdash; but only <b>within one column</b>. Phosphorus sits in the raw
+        <b>category 2</b> column with Molybdenum, Chromium and Technetium, so
+        those three are the only things you can spend on it.</p>
+        <p>Each grade step costs you: trading <b>down</b> a grade gives you
+        <b>3&times;</b> as many, trading <b>up</b> a grade costs <b>6&times;</b> as
+        many. Steps compound, so two grades down is 9&times; and two grades up is
+        36&times;. Trading down is nearly always the better deal.</p>
+      </details>
+      <form id="mf-form" class="route-form">
+        <label class="mf-material-field">Material
+          <input id="mf-material" type="text" list="mf-material-list" autocomplete="off"
+            placeholder="e.g. Phosphorus — or leave blank for all traders">
+        </label>
+        <datalist id="mf-material-list"></datalist>
+        <label>Near
+          <input id="mf-near" type="text" autocomplete="off" placeholder="current system">
+        </label>
+        <label id="mf-minshare-wrap">Min concentration
+          <input id="mf-minshare" type="number" min="0" max="100" step="0.5" value="10"
+            inputmode="decimal" title="Only show bodies where the material is at least this percentage of the surface composition">
+        </label>
+        <button type="submit" id="mf-go" class="hb hb-primary">FIND</button>
+      </form>
+      <div id="mf-answer"></div>
+      <div id="mf-status" class="dim"></div>
+      <div id="mf-bodies-wrap" class="hidden">
+        <div class="label mf-section-label">WHERE TO PROSPECT IT <span class="dim">landable bodies &middot; via Spansh</span></div>
+        <div id="mf-bodies-status" class="dim"></div>
+        <div class="table-wrap">
+          <table id="mf-bodies-table" class="hidden">
+            <thead><tr>
+              <th class="sortable" data-sort="body">Body</th>
+              <th class="sortable" data-sort="subtype">Type</th>
+              <th class="num sortable" data-sort="share">Share</th>
+              <th class="sortable" data-sort="system">System</th>
+              <th class="num sortable" data-sort="jump">Jump</th>
+              <th class="num sortable" data-sort="dist_ls">Arrival</th>
+              <th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="mf-traders-wrap" class="hidden">
+        <div class="label mf-section-label">NEAREST MATERIAL TRADERS <span class="dim">via Spansh</span></div>
+        <div id="mf-traders-status" class="dim"></div>
+        <div class="table-wrap">
+          <table id="mf-traders-table" class="hidden">
+            <thead><tr>
+              <th class="sortable" data-sort="station">Station</th>
+              <th class="sortable" data-sort="system">System</th>
+              <th class="sortable" data-sort="kind">Trades</th>
+              <th class="num sortable" data-sort="jump">Jump</th>
+              <th class="num sortable" data-sort="dist_ls">Arrival</th>
+              <th class="sortable" data-sort="pad">Pad</th>
+              <th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section class="card" id="materials-card" data-arr="materials">
       <div class="card-head">
         <div class="label">ENGINEERING MATERIALS <span class="dim">raw · manufactured · encoded · from your journal</span></div>

@@ -19,7 +19,7 @@ vi.mock("../../ui/src/api/market.js", () => ({
 
 import { StaleResponseError } from "../../ui/src/core/http.js";
 import { appStore } from "../../ui/src/core/store.js";
-import { findTraders } from "../../ui/src/features/engineering.js";
+import { searchMaterialTraders } from "../../ui/src/features/material-traders.js";
 import { findBestLoop, findRoutes } from "../../ui/src/features/routes.js";
 
 function deferred() {
@@ -138,34 +138,43 @@ describe("commander handoff UI guards", () => {
   });
 
   it("does not turn stale material-trader failures into another commander's rows", async () => {
-    document.body.innerHTML = '<div id="engplan-traders"></div>';
+    document.body.innerHTML = [
+      '<div id="mf-traders-status"></div>',
+      '<button id="mf-go"></button>',
+      '<div id="mf-traders-wrap"></div>',
+      '<table id="mf-traders-table"><tbody></tbody></table>',
+    ].join("");
     publishCommander("alpha", "Sol");
     const alphaResponses = [deferred(), deferred(), deferred()];
     const betaResponses = [deferred(), deferred(), deferred()];
     for (const response of [...alphaResponses, ...betaResponses]) {
       apiMocks.findMaterialTraders.mockReturnValueOnce(response.promise);
     }
+    const kinds = ["raw", "manufactured", "encoded"];
 
-    const alphaSearch = findTraders();
+    const alphaSearch = searchMaterialTraders({ kinds });
     publishCommander("beta", "Achenar");
-    expect(document.querySelector("#engplan-traders").textContent).toBe("");
-    const betaSearch = findTraders();
+    // The profile change resets the table and re-enables the button.
+    expect(document.querySelector("#mf-traders-table tbody").children).toHaveLength(0);
+    expect(document.querySelector("#mf-go").disabled).toBe(false);
+    const betaSearch = searchMaterialTraders({ kinds });
 
     alphaResponses[0].reject(new StaleResponseError());
     alphaResponses[1].resolve({ traders: [] });
     alphaResponses[2].resolve({ traders: [] });
     await alphaSearch;
 
-    expect(document.querySelector("#engplan-traders").textContent).toContain(
-      "Finding material traders",
-    );
-    expect(document.querySelectorAll(".ep-trader")).toHaveLength(0);
+    // Alpha's flight is abandoned silently: no rows, no error text for beta.
+    expect(document.querySelector("#mf-traders-table tbody").children).toHaveLength(0);
+    expect(document.querySelector("#mf-traders-status").classList.contains("error")).toBe(false);
 
-    for (const response of betaResponses) response.resolve({ traders: [] });
+    betaResponses[0].resolve({
+      traders: [{ station: "Jameson Memorial", system: "Shinrarta Dezhra", distance: 0 }],
+    });
+    betaResponses[1].resolve({ traders: [] });
+    betaResponses[2].resolve({ traders: [] });
     await betaSearch;
-    expect(document.querySelectorAll(".ep-trader")).toHaveLength(3);
-    expect(document.querySelector("#engplan-traders").textContent).not.toContain(
-      "Trader search failed",
-    );
+    expect(document.querySelector("#mf-traders-table tbody").children).toHaveLength(1);
+    expect(document.querySelector("#mf-traders-status").textContent).toContain("1 material trader");
   });
 });

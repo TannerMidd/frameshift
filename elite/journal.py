@@ -1509,6 +1509,21 @@ class JournalWatcher:
     def _on_materialdiscarded(self, e):
         self._adjust_material(e.get("Category"), e, -1)
 
+    def _on_materialtrade(self, e):
+        """A material-trader exchange. Unlike the other material events, the
+        Paid/Received halves are named Material/Material_Localised/Quantity
+        rather than Name/Name_Localised/Count, so they are translated first."""
+        for key, sign in (("Paid", -1), ("Received", +1)):
+            side = e.get(key) or {}
+            name = side.get("Material")
+            if not name:
+                continue
+            self._adjust_material(side.get("Category") or e.get("TraderType"), {
+                "Name": name,
+                "Name_Localised": side.get("Material_Localised"),
+                "Count": side.get("Quantity", 0),
+            }, sign)
+
     def _on_died(self, e):
         # Exobio samples and unsold cartographic data are lost on death.
         self.state.update(bio_vault=[], bio_sampling=None, bio_sample_points=[],

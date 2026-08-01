@@ -48,6 +48,7 @@ REQUIRED = {
     ("DELETE", "/api/specialists/exobiology/pins/<pin_id>"),
     ("GET", "/api/specialists/exobiology/geojson"),
     ("GET", "/api/material-traders"),
+    ("GET", "/api/material-bodies"),
     ("GET", "/api/sell-data"),
     ("GET", "/api/interstellar-factors"),
     ("GET", "/api/loadout-export"),

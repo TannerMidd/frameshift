@@ -59,6 +59,7 @@ assert stale_read.status_code == 409 and stale_read.get_json()["profile_changed"
 for path in (
     "/api/loadout-export", "/api/cargo-sell",
     "/api/colonisation-sources", "/api/material-traders",
+    "/api/material-bodies",
 ):
     stale_personal_read = client.get(
         path, headers={"X-Frameshift-Commander": alpha})
@@ -202,6 +203,7 @@ for path in (
     "/api/cargo-sell",
     "/api/colonisation-sources",
     "/api/material-traders",
+    "/api/material-bodies",
     "/api/commodity-search", "/api/mining", "/api/mining/hotspots",
     "/api/exobio-route", "/api/sell-data", "/api/interstellar-factors",
     "/api/station-search",

@@ -21,6 +21,13 @@ import {
 } from "../../ui/src/features/routes.js";
 import { MN_SORT_COLUMNS } from "../../ui/src/features/mining.js";
 import { OS_SORT_COLUMNS } from "../../ui/src/features/stations.js";
+import {
+  resolveMaterial,
+  setMaterialReference,
+  tradeLines,
+} from "../../ui/src/features/material-finder.js";
+import { MT_SORT_COLUMNS } from "../../ui/src/features/material-traders.js";
+import { MB_SORT_COLUMNS } from "../../ui/src/features/material-bodies.js";
 import { panelModeOnLaunch } from "../../ui/src/shell/panel.js";
 
 describe("panel preference behavior", () => {
@@ -123,6 +130,122 @@ describe("engineering catalog behavior", () => {
         target_grade: 5,
       }),
     ).toBe("G2 → G5");
+  });
+});
+
+describe("material finder resolution", () => {
+  // Mirrors the raw category 2 column the server ships, plus one Guardian
+  // material that has a family but no trader column.
+  const material = (name, symbol, grade, extra = {}) => ({
+    name,
+    symbol,
+    kind: "raw",
+    family: "Category2",
+    grade,
+    tradeable: true,
+    source: "Surface prospecting",
+    ...extra,
+  });
+  const catalog = {
+    groups: [],
+    kind_labels: {},
+    stats: {},
+    materials: [
+      material("Phosphorus", "phosphorus", 1),
+      material("Chromium", "chromium", 2),
+      material("Molybdenum", "molybdenum", 3),
+      material("Technetium", "technetium", 4),
+      material("Nickel", "nickel", 1, { family: "Category5" }),
+      material("Sensor Fragment", "sensorfragment", 5, {
+        kind: "manufactured",
+        family: "ThargoidSite",
+        tradeable: false,
+      }),
+    ],
+    material_columns: {
+      "raw/Category2": { label: "Raw category 2", tradeable: true },
+      "raw/Category5": { label: "Raw category 5", tradeable: true },
+      "manufactured/ThargoidSite": { label: "Thargoid structures", tradeable: false },
+    },
+    trade_ratios: { up: 6, down: 3 },
+  };
+
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    setMaterialReference(catalog);
+  });
+
+  it("resolves a material to its column and same-column peers only", () => {
+    const resolved = resolveMaterial("Phosphorus");
+    expect(resolved.material.symbol).toBe("phosphorus");
+    expect(resolved.column.label).toBe("Raw category 2");
+    // Nickel shares the kind but not the column, so it is never a peer.
+    expect(resolved.peers.map((peer) => peer.name)).toEqual([
+      "Chromium",
+      "Molybdenum",
+      "Technetium",
+    ]);
+  });
+
+  it("folds case and punctuation the way the bundled catalog does", () => {
+    expect(resolveMaterial("phosphorus").material.symbol).toBe("phosphorus");
+    expect(resolveMaterial("  PHOSPHORUS  ".trim()).material.symbol).toBe("phosphorus");
+    expect(resolveMaterial("Sensor-Fragment").material.symbol).toBe("sensorfragment");
+    expect(resolveMaterial("unobtainium")).toBe(null);
+  });
+
+  it("prices every peer against the target, cheapest first", () => {
+    const target = resolveMaterial("Phosphorus");
+    expect(tradeLines(target.material, target.peers, catalog.trade_ratios)).toEqual([
+      { peer: "Chromium", grade: 2, spend: 1, gain: 3, direction: "down" },
+      { peer: "Molybdenum", grade: 3, spend: 1, gain: 9, direction: "down" },
+      { peer: "Technetium", grade: 4, spend: 1, gain: 27, direction: "down" },
+    ]);
+  });
+
+  it("charges 6x per grade step when trading up", () => {
+    const target = resolveMaterial("Technetium");
+    expect(tradeLines(target.material, target.peers, catalog.trade_ratios)).toEqual([
+      { peer: "Molybdenum", grade: 3, spend: 6, gain: 1, direction: "up" },
+      { peer: "Chromium", grade: 2, spend: 36, gain: 1, direction: "up" },
+      { peer: "Phosphorus", grade: 1, spend: 216, gain: 1, direction: "up" },
+    ]);
+  });
+
+  it("keeps a non-tradeable material's column without offering trades", () => {
+    const resolved = resolveMaterial("Sensor Fragment");
+    expect(resolved.column).toEqual({ label: "Thargoid structures", tradeable: false });
+    expect(resolved.material.tradeable).toBe(false);
+  });
+
+  it("sorts trader and body rows without mutating the source array", () => {
+    const traders = [
+      { station: "B", system: "Beta", kind: "raw", distance: 20, dist_ls: 500, large_pad: false },
+      { station: "A", system: "Alpha", kind: "encoded", distance: 5, dist_ls: 20, large_pad: true },
+    ];
+    const original = [...traders];
+    expect(
+      sortedRows(traders, MT_SORT_COLUMNS, bumpSort(null, "jump", MT_SORT_COLUMNS)).map(
+        (row) => row.station,
+      ),
+    ).toEqual(["A", "B"]);
+    expect(traders).toEqual(original);
+
+    const bodies = [
+      { body: "One", subtype: "Icy body", share: 8.1, system: "Alpha", distance: 4 },
+      { body: "Two", subtype: "Rocky body", share: 14.2, system: "Beta", distance: 9 },
+    ];
+    // Share defaults to richest-first; distance defaults to nearest-first.
+    expect(
+      sortedRows(bodies, MB_SORT_COLUMNS, bumpSort(null, "share", MB_SORT_COLUMNS)).map(
+        (row) => row.body,
+      ),
+    ).toEqual(["Two", "One"]);
+    expect(
+      sortedRows(bodies, MB_SORT_COLUMNS, bumpSort(null, "jump", MB_SORT_COLUMNS)).map(
+        (row) => row.body,
+      ),
+    ).toEqual(["One", "Two"]);
   });
 });
 

@@ -32,6 +32,7 @@ const manifest = [
   ["features/security-extensions.css", "features"],
   ["panel/hud-controls.css", "panel"],
   ["features/jump-sequence.css", "features"],
+  ["features/material-finder.css", "features"],
 ];
 
 function findCssFiles(directory, prefix = "") {
