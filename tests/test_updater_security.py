@@ -1,5 +1,6 @@
 """The updater fails closed and never promotes a partial/unverified binary."""
 
+import errno
 import hashlib
 import json
 import sys
@@ -9,7 +10,15 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from elite.updater import MAX_DOWNLOAD_BYTES, Updater, parse_version
+from elite.updater import (
+    BACKUP_SUFFIX,
+    MAX_DOWNLOAD_BYTES,
+    Updater,
+    _base_stem,
+    _leftover_names,
+    _os_error_detail,
+    parse_version,
+)
 
 
 class Response:
@@ -39,7 +48,7 @@ class Response:
 assert parse_version("v2.3.0-beta1") == (2, 3, 0)
 
 with tempfile.TemporaryDirectory() as td:
-    root = Path(td)
+    root = Path(td).resolve()
     binary = b"MZ" + b"verified executable payload"
     digest = hashlib.sha256(binary).hexdigest()
     checksum_asset = {
@@ -121,22 +130,69 @@ with tempfile.TemporaryDirectory() as td:
         def start(self):
             pass
 
-    rollback = root / "Frameshift.old.exe"
-    rollback.write_bytes(binary)
     marker = root / ".frameshift-update-health.json"
     nonce = "a" * 32
-    marker.write_text(json.dumps({
-        "version": 1, "state": "awaiting_health", "nonce": nonce,
-    }), encoding="utf-8")
+
+    def stage_marker():
+        marker.write_text(json.dumps({
+            "version": 1, "state": "awaiting_health", "nonce": nonce,
+        }), encoding="utf-8")
+
+    rollback = root / f"Frameshift{BACKUP_SUFFIX}"
+    rollback.write_bytes(binary)
+    # Leftovers from installs that updated before the .rollback.bak scheme,
+    # including the .old.old.exe a rollback-copy launch used to strand forever.
+    legacy = [root / name for name in (
+        "Frameshift.old.exe", "Frameshift.old.old.exe", "EliteTrader.old.exe",
+        f"Frameshift{BACKUP_SUFFIX}.tmp",
+    )]
+    for path in legacy:
+        path.write_bytes(binary)
+    stage_marker()
     with patch("elite.updater._exe_dir", return_value=root), \
             patch("elite.updater._exe_stem", return_value="Frameshift"), \
             patch("elite.updater.threading.Timer", Timer), \
             patch.object(sys, "frozen", True, create=True):
         updater.cleanup_leftovers()
         assert rollback.is_file(), "first launch discarded the rollback"
+        assert all(p.is_file() for p in legacy), "first launch swept leftovers early"
         updater._confirm_healthy_launch(nonce)
         assert json.loads(marker.read_text(encoding="utf-8"))["state"] == "healthy"
         updater.cleanup_leftovers()
         assert not rollback.exists() and not marker.exists()
+        for path in legacy:
+            assert not path.exists(), f"legacy leftover survived: {path.name}"
 
-print("updater OK: SHA-256 integrity, redirect validation, retained rollback, atomic downloads")
+    # An install launched from a rollback copy runs as Frameshift.old.exe and
+    # keeps that name through every later update. Its backup must normalise back
+    # to one file, and cleanup must never aim a delete at the running binary.
+    running = root / "Frameshift.old.exe"
+    running.write_bytes(binary)
+    orphan = root / "Frameshift.old.old.exe"
+    orphan.write_bytes(binary)
+    stage_marker()
+    with patch("elite.updater._exe_dir", return_value=root), \
+            patch.object(sys, "executable", str(running)), \
+            patch("elite.updater.threading.Timer", Timer), \
+            patch.object(sys, "frozen", True, create=True):
+        assert _base_stem() == "Frameshift", "the .old chain was not stripped"
+        assert f"Frameshift{BACKUP_SUFFIX}" in _leftover_names()
+        updater._confirm_healthy_launch(nonce)
+        updater.cleanup_leftovers()
+        assert running.is_file(), "cleanup deleted the running executable"
+        assert not orphan.exists(), "the .old.old.exe orphan survived"
+
+# Update failures name a cause the user can act on. Collapsing every OSError
+# into one sentence is what made the Wacatac.B!ml false positive undiagnosable.
+class VirusBlocked(OSError):
+    winerror = 225
+
+
+detail = _os_error_detail(VirusBlocked("access denied"))
+assert "antivirus" in detail and "225" in detail, detail
+assert _os_error_detail(OSError(errno.ENOSPC, "No space left")) == "the disk is full"
+assert "locked" in _os_error_detail(PermissionError(13, "Permission denied"))
+assert "removed it" in _os_error_detail(FileNotFoundError(2, "No such file"))
+
+print("updater OK: SHA-256 integrity, redirect validation, retained rollback, "
+      "leftover sweep, diagnosable failures, atomic downloads")

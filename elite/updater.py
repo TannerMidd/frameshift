@@ -12,9 +12,12 @@ binary under both names. This module prefers the new asset name but falls back
 to the legacy one, and derives all staging/backup filenames from the *running*
 exe's own name — an updated install keeps whatever filename it has on disk.
 
+The rollback copy is a .rollback.bak, never an .exe — see BACKUP_SUFFIX.
+
 Distribution is already GitHub-Releases based (see .github/workflows/release.yml),
 so no extra infrastructure is needed."""
 
+import errno
 import hashlib
 import json
 import logging
@@ -45,6 +48,19 @@ DOWNLOAD_TIMEOUT = 60
 MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
 HEALTH_CONFIRM_SECONDS = 60
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+# The rollback copy is deliberately NOT an .exe. Through v2.9.0 it was written
+# as "<stem>.old.exe": an unsigned program dropping a byte-identical copy of
+# itself next to itself, which is also a fair description of self-replication.
+# Defender scored it that way and deleted the copy mid-write as
+# Trojan:Win32/Wacatac.B!ml (WinError 225), which cancelled the update.
+# This does not overrule a scanner's verdict on the *binary* — only signing does
+# that — it just stops the updater from producing a second executable to judge.
+BACKUP_SUFFIX = ".rollback.bak"
+# Backup names this install may have left behind under either product name.
+_PRODUCT_STEMS = ("Frameshift", "EliteTrader")
+# Pre-2.9.1 backups were "<stem>.old.exe"; a copy launched from one of those
+# produced "<stem>.old.old.exe", which nothing ever cleaned up.
+_LEGACY_OLD_DEPTH = 3
 _logger = logging.getLogger(__name__)
 _DOWNLOAD_HOSTS = {
     "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com",
@@ -82,6 +98,62 @@ def _exe_stem():
     still live at EliteTrader.exe (the in-place swap keeps the old filename),
     so staging/backup names must follow the actual file, not the product name."""
     return Path(sys.executable).stem
+
+
+def _base_stem():
+    """The running exe's stem with any trailing ".old" chain removed.
+
+    A user whose replacement failed to launch tends to double-click the rollback
+    copy rather than rename it, and the swap keeps whatever filename it relaunched
+    from — so that install runs as Frameshift.old.exe forever. Deriving backup
+    names from the raw stem then produced Frameshift.old.old.exe on every update,
+    which no cleanup pass recognised. Normalising here keeps one backup per
+    install regardless of the name it ended up with."""
+    stem = _exe_stem()
+    while stem[-4:].lower() == ".old":
+        stem = stem[:-4]
+    return stem or _exe_stem()
+
+
+def _leftover_names():
+    """Every backup filename this install could have left behind: the current
+    .rollback.bak plus the pre-2.9.1 .old.exe chain, under the running name and
+    both product names. Deliberately an explicit list rather than a glob — the
+    exe may sit in a directory full of unrelated files (a drive root, say), and
+    cleanup must never reach beyond names it could have written itself."""
+    names = []
+    for stem in dict.fromkeys((_base_stem(), _exe_stem(), *_PRODUCT_STEMS)):
+        if not stem:
+            continue
+        names.append(f"{stem}{BACKUP_SUFFIX}")
+        names.append(f"{stem}{BACKUP_SUFFIX}.tmp")  # a copy killed mid-write
+        for depth in range(1, _LEGACY_OLD_DEPTH + 1):
+            names.append(f"{stem}{'.old' * depth}.exe")
+    return names
+
+
+def _os_error_detail(exc):
+    """Turn an OSError into a short cause the user can act on.
+
+    Every failure here used to surface as one opaque sentence, so an antivirus
+    eating the rollback copy was indistinguishable from a full disk — and the log
+    recorded only the exception's type name, losing the winerror entirely."""
+    winerror = getattr(exc, "winerror", None)
+    # 225 ERROR_VIRUS_INFECTED / 226 ERROR_VIRUS_DELETED.
+    if winerror in (225, 226):
+        return ("your antivirus blocked it (WinError %d) — allow Frameshift in your"
+                " antivirus, or install the update manually from the releases page"
+                % winerror)
+    if getattr(exc, "errno", None) == errno.ENOSPC:
+        return "the disk is full"
+    detail = (getattr(exc, "strerror", None) or str(exc) or type(exc).__name__).strip()
+    if isinstance(exc, FileNotFoundError):
+        detail += " (antivirus or cleanup software may have removed it)"
+    elif isinstance(exc, PermissionError):
+        detail += " (the file may be locked by another program)"
+    if winerror and f"WinError {winerror}" not in detail:
+        detail += f" (WinError {winerror})"
+    return detail
 
 
 def _trusted_https(url, hosts):
@@ -339,7 +411,11 @@ class Updater:
                     path.unlink()
                 except OSError:
                     pass
-            _logger.warning("Update failed during %s: %s", self.phase, type(exc).__name__)
+            # The message carries the actionable cause (antivirus, disk full,
+            # locked file); logging only the type name threw that away.
+            _logger.warning(
+                "Update failed during %s: %s: %s", self.phase, type(exc).__name__, exc
+            )
             self._set(phase="error", error=str(exc))
 
     def _download(self, url, dest):
@@ -431,11 +507,11 @@ class Updater:
         exe = Path(sys.executable).resolve()
         # Back up the current, working exe so a bad launch of the new one is
         # recoverable: if the new exe fails to start, cleanup_leftovers never
-        # runs, so the .old.exe survives for the user to rename back.
-        # Reading a running exe is allowed on Windows.
+        # runs, so the .rollback.bak survives for the user to rename back to
+        # <name>.exe. Reading a running exe is allowed on Windows.
         import shutil
 
-        backup = _exe_dir() / f"{_exe_stem()}.old.exe"
+        backup = _exe_dir() / f"{_base_stem()}{BACKUP_SUFFIX}"
         backup_temp = backup.with_suffix(backup.suffix + ".tmp")
         try:
             shutil.copy2(exe, backup_temp)
@@ -448,7 +524,9 @@ class Updater:
                 backup_temp.unlink()
             except OSError:
                 pass
-            raise RuntimeError("could not create a rollback copy — update cancelled") from exc
+            raise RuntimeError(
+                f"could not create a rollback copy — {_os_error_detail(exc)}"
+            ) from exc
         try:
             _write_update_health({
                 "version": 1,
@@ -462,7 +540,9 @@ class Updater:
                 backup.unlink()
             except OSError:
                 pass
-            raise RuntimeError("could not create the rollback health marker") from exc
+            raise RuntimeError(
+                f"could not create the rollback health marker — {_os_error_detail(exc)}"
+            ) from exc
         bat = _exe_dir() / "_et_update.bat"
         bat.write_text(updater_script(exe, new_path), encoding="ascii")
         # CREATE_NO_WINDOW (not DETACHED_PROCESS) keeps a console so the batch's
@@ -507,9 +587,16 @@ class Updater:
             return
         if marker.get("state") != "healthy":
             return
-        for name in (f"{_exe_stem()}.old.exe", "EliteTrader.old.exe", "Frameshift.old.exe"):
+        running = Path(sys.executable).resolve()
+        for name in _leftover_names():
+            path = _exe_dir() / name
             try:
-                (_exe_dir() / name).unlink()
+                # An install running as Frameshift.old.exe has the running exe
+                # itself on that list; Windows refuses the unlink anyway, but
+                # never aim a delete at the binary we are executing from.
+                if path.resolve() == running:
+                    continue
+                path.unlink()
             except OSError:
                 pass
         try:
