@@ -1,0 +1,185 @@
+/*
+ * Title bar for the frameless desktop window.
+ *
+ * Only present when the app is running inside pywebview — initializeTitleBar
+ * mounts nothing in a browser tab or on a paired tablet, so none of this applies
+ * there. The accent comes from the theme tokens, so switching Color theme
+ * retints the bar with everything else; elite/windowchrome.py separately tints
+ * the one thing CSS cannot reach, the system border.
+ *
+ * Lives in the `chrome` layer, declared last. That is a real precedence claim,
+ * not a specificity trick: the window frame must win over every app layer
+ * (`panel` in particular), because the app cannot be allowed to paint over the
+ * only means of moving or closing its own window.
+ */
+
+:root {
+  --titlebar-h: 0px;
+}
+
+body.has-titlebar {
+  --titlebar-h: 34px;
+  padding-top: var(--titlebar-h);
+}
+
+.titlebar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 900;
+  display: flex;
+  align-items: stretch;
+  height: var(--titlebar-h);
+  background: linear-gradient(180deg, var(--panel-2) 0%, var(--panel) 100%);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.35);
+  user-select: none;
+}
+
+/*
+ * Viewport-anchored app chrome has to start below the caption. padding-top on
+ * body only moves what is in normal flow; a position:fixed element still
+ * measures from the top of the window, which is what left the nav rail's logo
+ * buried under the title bar.
+ *
+ * Deliberately a short list rather than a blanket offset. The full-bleed
+ * overlays — #fsd-overlay, the CRT scanline and vignette layers, the panel boot
+ * splash — are *meant* to cover the whole window, and all sit below z-900 so the
+ * caption stays on top of them. The pairing gate is listed because at z-10000 it
+ * would bury the caption instead, leaving no way to move or close the window.
+ */
+body.has-titlebar #fp-nav,
+body.has-titlebar .pairing-gate {
+  top: var(--titlebar-h);
+}
+
+.titlebar-drag {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-left: 12px;
+}
+
+.titlebar-mark {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid var(--orange);
+  transform: rotate(45deg);
+  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.5);
+}
+
+.titlebar-name {
+  overflow: hidden;
+  color: var(--orange);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-buttons {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+}
+
+/*
+ * Square, quiet, and closer together than a normal utility button: these read as
+ * window controls rather than as app actions. Holo Bracket supplies the focus
+ * ring and disabled handling; only the geometry is overridden.
+ *
+ * Zeroing the touch-target floor is deliberate and limited to these three. Panel
+ * mode raises buttons to a 44px touch target, which would burst a 34px caption;
+ * these are window controls on a desktop window, sized to match the system
+ * buttons they replace, and are never the touch surface panel mode widens for.
+ */
+.titlebar .titlebar-btn.hb {
+  width: 30px;
+  height: 24px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.titlebar .titlebar-btn.hb:hover,
+/* Windows owns the pointer over the maximize button (it is reported as
+   HTMAXBUTTON so Snap Layouts appear), so :hover never fires there. The native
+   side sets this class instead — without it the button looks dead on hover. */
+.titlebar .titlebar-btn.hb.hover {
+  background: rgba(var(--accent-rgb), 0.14);
+  border-color: rgba(var(--accent-rgb), 0.55);
+  color: var(--orange-soft);
+}
+
+.titlebar .titlebar-btn.hb:active {
+  background: rgba(var(--accent-rgb), 0.26);
+}
+
+.titlebar .titlebar-close.hb:hover,
+.titlebar .titlebar-close.hb.hover {
+  background: rgba(224, 93, 93, 0.85);
+  border-color: rgba(224, 93, 93, 0.9);
+  color: #fff;
+}
+
+/* Maximized windows sit flush against the screen edges, so the glow that reads
+   as depth on a floating window just looks like a smudge. */
+body.window-maximized .titlebar {
+  border-bottom-color: rgba(var(--accent-rgb), 0.25);
+}
+
+body.window-maximized .titlebar-mark {
+  box-shadow: none;
+}
+
+/*
+ * Borderless fullscreen. The caption is gone rather than covered, so collapsing
+ * the variable is the whole change: body's padding-top and the viewport-anchored
+ * offsets above are all written in terms of it and reach zero together.
+ */
+body.has-titlebar.window-fullscreen {
+  --titlebar-h: 0px;
+}
+
+body.window-fullscreen .titlebar {
+  display: none;
+}
+
+/*
+ * Taking the title bar away takes away the only visible way to get the window
+ * back, so arriving in fullscreen says how to leave. Shaped like the flight
+ * toast but deliberately not one: that channel carries interdiction and hull
+ * warnings on a single shared timer, and an interface hint has no business
+ * interrupting them. Above the caption's z-900, for the moment they overlap.
+ */
+.fs-hint {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 901;
+  max-width: 92vw;
+  padding: 10px 20px;
+  border: 1px solid rgba(var(--accent-rgb), 0.55);
+  border-radius: 8px;
+  background: rgba(10, 12, 15, 0.92);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  color: var(--orange-soft);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  transform: translateX(-50%);
+  animation: drop-in 0.2s var(--ease);
+  pointer-events: none;
+}
+
+.fs-hint.hidden {
+  display: none;
+}

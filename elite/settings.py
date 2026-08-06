@@ -32,6 +32,12 @@ DEFAULTS = {
     # journal. Elite's oldest unsolved legend is the default; see galaxywatch.
     "galaxy_watch_systems": ["Raxxla"],
     "tts_voice": "en_GB-cori-high",  # neural callout voice (see tts.VOICES)
+    # Remembered desktop window state, not a setting anyone toggles here: the
+    # window has to know before it is shown, and only the machine running the
+    # exe has one, so it cannot live in the browser alongside the other
+    # per-device preferences. Deliberately absent from the settings UI, which
+    # renders from its own list rather than from these keys.
+    "window_fullscreen": False,
 }
 
 _lock = threading.Lock()

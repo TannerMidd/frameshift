@@ -15,6 +15,13 @@ export function initializeUpdaterControls() {
     if (event.target === event.currentTarget) closeNotes();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeNotes();
+    if (event.key !== "Escape") return;
+    const modal = requireById("notes-modal");
+    if (modal.classList.contains("hidden")) return;
+    closeNotes();
+    // Escape is shared — leaving the desktop window's fullscreen listens for it
+    // too. Marking it used is how the one nearest the commander wins, without
+    // either handler having to know the other exists.
+    event.preventDefault();
   });
 }

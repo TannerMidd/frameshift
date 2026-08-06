@@ -33,6 +33,8 @@ const manifest = [
   ["panel/hud-controls.css", "panel"],
   ["features/jump-sequence.css", "features"],
   ["features/material-finder.css", "features"],
+  // Declared last so the desktop window's frame outranks every app layer.
+  ["chrome/titlebar.css", "chrome"],
 ];
 
 function findCssFiles(directory, prefix = "") {
@@ -64,7 +66,8 @@ for (const [relativePath] of manifest) {
 }
 
 const indexCss = fs.readFileSync(path.join(outputRoot, "index.css"), "utf8");
-const layerOrder = "@layer reset, tokens, base, components, features, panel, themes, motion;";
+const layerOrder =
+  "@layer reset, tokens, base, components, features, panel, themes, motion, chrome;";
 if (!indexCss.includes(layerOrder)) {
   throw new Error("styles/index.css is missing the declared semantic layer order.");
 }

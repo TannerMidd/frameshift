@@ -54,7 +54,22 @@ def start_window():
 
 
 class WindowApi:
-    """Bridge so links clicked inside the pywebview window open in the real browser."""
+    """Bridge between the page and the native window.
+
+    Originally just "open this link in the real browser"; it now also carries the
+    custom title bar, because a frameless window has no system buttons and the
+    page is the only thing that knows where its own title bar ended up.
+    """
+
+    def __init__(self):
+        self._window = None
+        self._chrome = None
+
+    def bind(self, window, chrome):
+        """Called once the window exists. The api has to be constructed first to
+        be passed as js_api, so the wiring runs in this direction."""
+        self._window = window
+        self._chrome = chrome
 
     def open_url(self, url):
         if isinstance(url, str) and url.startswith(("http://", "https://")):
@@ -67,7 +82,112 @@ class WindowApi:
             return
         import webview
 
+        # Deliberately left with its native frame: this shows someone else's
+        # site, and cockpit chrome around third-party pages reads as a spoof.
         webview.create_window(str(title or "Browser"), url, width=1150, height=850)
+
+    # -- custom title bar --------------------------------------------------
+    def window_minimize(self):
+        if self._window:
+            self._window.minimize()
+
+    def window_toggle_maximize(self):
+        if self._chrome:
+            self._chrome.toggle_maximize()
+
+    def window_close(self):
+        if self._window:
+            self._window.destroy()
+
+    def window_is_maximized(self):
+        return bool(self._chrome and self._chrome.is_maximized())
+
+    # -- fullscreen --------------------------------------------------------
+    def window_toggle_fullscreen(self):
+        """F11. Borderless over the whole monitor, taskbar and title bar gone."""
+        if self._chrome:
+            self._chrome.request_fullscreen(None)
+
+    def window_set_fullscreen(self, on):
+        """Esc and leaving Panel mode both want "out", not "the other one"."""
+        if self._chrome:
+            self._chrome.request_fullscreen(bool(on))
+
+    def window_is_fullscreen(self):
+        """Read once as the page mounts, so a remembered fullscreen does not
+        paint a title bar for a frame before hiding it again."""
+        return bool(self._chrome and self._chrome.is_fullscreen())
+
+    def set_chrome_metrics(self, metrics):
+        """Where the title bar is right now, in physical pixels.
+
+        Reported by the page rather than assumed here: whole-app zoom, the
+        per-device size sliders and a move to a different-DPI monitor all change
+        it, and a stale value leaves the drag strip somewhere the title bar
+        isn't.
+        """
+        if not (self._chrome and isinstance(metrics, dict)):
+            return
+        self._chrome.set_metrics(
+            drag_rects=metrics.get("drag") or (),
+            max_button=metrics.get("maxButton"),
+        )
+
+    def set_accent(self, accent):
+        """Follow the per-device Color theme into the parts CSS cannot reach."""
+        if self._chrome:
+            self._chrome.set_accent(accent)
+
+
+def open_main_window(local_url):
+    """Open the desktop window and run the GUI loop until it closes.
+
+    Frameless, so the title bar can be drawn in the cockpit theme like the rest
+    of the app; elite.windowchrome hands back what a frame was giving us for
+    free — edge resizing, Aero Snap, Snap Layouts, and a maximize that respects
+    the taskbar.
+
+    easy_drag has to stay off. On the Edge Chromium backend pywebview implements
+    it as a mousedown listener across the entire window, so it would drag the app
+    on every click anywhere. The chrome module answers HTCAPTION over the title
+    bar instead, which gets the real native drag, snapping included.
+    """
+    import webview
+
+    from elite import settings, windowchrome
+
+    api = WindowApi()
+    window = webview.create_window(
+        "Frameshift",
+        local_url,
+        js_api=api,
+        width=1060,
+        height=800,
+        min_size=(760, 560),
+        frameless=True,
+        easy_drag=False,
+    )
+    # Read before the window is shown, so a remembered fullscreen opens that way
+    # instead of appearing at 1060x800 and jumping to the screen a moment later.
+    chrome = windowchrome.attach(window, fullscreen=settings.get("window_fullscreen", False))
+    if chrome is not None:
+        chrome.on_change = _remember_fullscreen
+    api.bind(window, chrome)
+    start_window()
+
+
+def _remember_fullscreen(on):
+    """Persist the fullscreen choice for the next launch.
+
+    Called on the chrome's notification thread rather than the GUI thread: this
+    writes a file, and the window procedure is no place to touch the disk.
+    """
+    from elite import settings
+
+    try:
+        settings.update({"window_fullscreen": bool(on)})
+    except Exception:
+        logging.getLogger(__name__).debug("could not remember fullscreen", exc_info=True)
 
 
 def _shutdown_runtime(server=None, watcher=None, listener=None, extensions=None):
@@ -170,11 +290,7 @@ def main():
     if instance_already_running(args.port):
         print(f"Frameshift is already running on {local_url} — opening a window to it.")
         if not args.headless:
-            import webview
-
-            webview.create_window("Frameshift", local_url, js_api=WindowApi(),
-                                  width=1060, height=800, min_size=(760, 560))
-            start_window()
+            open_main_window(local_url)
         return
 
     server = None
@@ -218,17 +334,7 @@ def main():
         if args.headless:
             _wait_for_shutdown_signal(server)
         else:
-            import webview
-
-            webview.create_window(
-                "Frameshift",
-                local_url,
-                js_api=WindowApi(),
-                width=1060,
-                height=800,
-                min_size=(760, 560),
-            )
-            start_window()
+            open_main_window(local_url)
     except KeyboardInterrupt:
         pass
     finally:

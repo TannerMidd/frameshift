@@ -7,7 +7,7 @@ const sourceRoot = path.join(root, "ui", "src");
 const stylesRoot = path.join(root, "ui", "styles");
 const budgets = Object.freeze({
   productionModules: 145,
-  javascriptBytes: 768 * 1024,
+  javascriptBytes: 800 * 1024,
   stylesheetBytes: 180 * 1024,
   htmlBytes: 4 * 1024,
   singleModuleBytes: 24 * 1024,

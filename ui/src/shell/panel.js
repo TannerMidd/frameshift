@@ -1,5 +1,6 @@
 import { byId } from "../core/dom.js";
 import { appStore } from "../core/store.js";
+import { exitFullscreen, requestFullscreen } from "./fullscreen.js";
 import { activateTab } from "./tabs.js";
 import { renderPanel } from "./status.js";
 
@@ -38,10 +39,13 @@ export function panelModeOnLaunch(storage = localStorage) {
 export function setPanelMode(on, persist = true) {
   document.body.classList.toggle("panel-mode", on);
   if (persist) localStorage.setItem("panelMode", on ? "1" : "0");
-  // Fullscreen is opt-in via the rail's ⛶ FULL button; leaving the panel
-  // always drops back out of it.
-  if (!on && document.fullscreenElement) {
-    document.exitFullscreen().catch(() => {});
+  // Fullscreen is opt-in via the rail's ⛶ FULL button or F11; leaving the panel
+  // always drops back out of it. Dropping the native one is not just tidiness:
+  // ⛶ FULL lives in the panel rail, so a chromeless desktop layout would be
+  // left with no title bar and no rail — nothing visible to get back with.
+  if (!on) {
+    exitFullscreen();
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
   if (on) {
     runPanelBoot();
@@ -53,6 +57,11 @@ export function setPanelMode(on, persist = true) {
 }
 
 export function toggleFullscreen() {
+  // In the desktop window this is a real Win32 state. The DOM Fullscreen API
+  // cannot expand a WebView2 host, which is why this button used to do nothing
+  // there; a paired tablet in a real browser has no bridge and keeps the DOM
+  // path, where it works properly.
+  if (requestFullscreen()) return;
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {});
   } else if (document.documentElement.requestFullscreen) {

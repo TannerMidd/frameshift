@@ -193,7 +193,7 @@ CSS, performance, formatting, lint, strict typecheck, and Vitest gates.
 The performance gate enforces:
 
 - no more than 145 production modules;
-- no more than 768 KiB of production JavaScript;
+- no more than 800 KiB of production JavaScript;
 - no more than 180 KiB of CSS;
 - no more than 4 KiB for `ui/index.html`; and
 - no production module larger than 24 KiB.

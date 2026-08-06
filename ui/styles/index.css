@@ -4,7 +4,7 @@
  * Layer precedence is declared once. Import order within a layer is an
  * intentional part of the cascade contract and is verified in CI.
  */
-@layer reset, tokens, base, components, features, panel, themes, motion;
+@layer reset, tokens, base, components, features, panel, themes, motion, chrome;
 
 @import url("./tokens/tokens.css") layer(tokens);
 @import url("./base/fonts.css") layer(base);
@@ -34,4 +34,5 @@
 @import url("./panel/hud-controls.css") layer(panel);
 @import url("./features/jump-sequence.css") layer(features);
 @import url("./features/material-finder.css") layer(features);
+@import url("./chrome/titlebar.css") layer(chrome);
 @import url("../holo-buttons.css") layer(components);

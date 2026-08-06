@@ -1,3 +1,4 @@
+import { desktopBridge } from "../../core/desktop.js";
 import { setStyleValue } from "../../core/dom.js";
 import { html, render } from "../../core/html.js";
 
@@ -55,6 +56,9 @@ export function applyTheme() {
   setStyleValue(root, "--orange-soft", soft);
   setStyleValue(root, "--accent-rgb", accentRgb.join(", "));
   setStyleValue(root, "--accent-soft-rgb", softRgb.join(", "));
+  // The desktop window's system border and pre-paint background are outside the
+  // document, so CSS variables cannot reach them. No-ops everywhere else.
+  desktopBridge()?.set_accent?.(accent);
 }
 
 export function accentColor() {

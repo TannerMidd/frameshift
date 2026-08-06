@@ -235,6 +235,22 @@ main {
   gap: 14px;
 }
 
+/* A 1100px column suits the default window, but strands the desktop layout in a
+   sea of margin on a monitor — and going fullscreen makes that worse rather
+   than better. Same tiers the Panel status page already uses, so the two
+   layouts widen together; everything stays fluid between them. Panel mode
+   drops the cap entirely from a later layer and still wins. */
+@media (min-width: 1500px) {
+  main {
+    max-width: min(94vw, 1720px);
+  }
+}
+@media (min-width: 2200px) {
+  main {
+    max-width: min(88vw, 2100px);
+  }
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--border);

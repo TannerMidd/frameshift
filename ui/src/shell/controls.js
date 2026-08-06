@@ -12,6 +12,7 @@ import {
   migrateEngineeringLayout,
   setArrangeMode,
 } from "./cards.js";
+import { isFullscreen, syncFullscreenControl } from "./fullscreen.js";
 import { initPanelNav, setPanelMode, toggleFullscreen } from "./panel.js";
 import { setVoice, voiceOn } from "./voice.js";
 
@@ -54,12 +55,15 @@ export function initializeShellControls() {
   requireById("fp-voice").addEventListener("click", () => setVoice(!voiceOn, true));
   setVoice(voiceOn);
   requireById("fp-full").addEventListener("click", toggleFullscreen);
-  document.addEventListener("fullscreenchange", () => {
-    const on = Boolean(document.fullscreenElement);
-    const button = /** @type {HTMLElement} */ (requireById("fp-full"));
-    button.setAttribute("aria-pressed", String(on));
-    button.title = on ? "Leave fullscreen" : "Expand to fullscreen";
-  });
+  // Only fires for the DOM path a real browser takes; the desktop window
+  // reports its own state instead. Both land on the same function, so the
+  // button reads correctly whichever one moved it.
+  document.addEventListener("fullscreenchange", () =>
+    syncFullscreenControl(Boolean(document.fullscreenElement)),
+  );
+  // The window can open straight into a remembered fullscreen, well before this
+  // button exists to be labelled.
+  syncFullscreenControl(isFullscreen());
 
   applyTheme();
   applyCrtFx();
