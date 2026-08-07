@@ -29,7 +29,7 @@ jobs:
           if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
             throw "Release tag must match vMAJOR.MINOR.PATCH."
           }
-          $json = gh release view $tag --json isDraft,tagName
+          $json = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft,tagName
           if ($LASTEXITCODE -ne 0) { throw "Draft release $tag was not found." }
           $release = $json | ConvertFrom-Json
           if ($release.tagName -ne $tag -or -not $release.isDraft) {
@@ -56,7 +56,7 @@ jobs:
         run: |
           $tag = $env:RELEASE_TAG.Trim()
           New-Item -ItemType Directory -Path candidate | Out-Null
-          gh release download $tag --dir candidate `
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --dir candidate `
             --pattern "Frameshift.exe" `
             --pattern "EliteTrader.exe" `
             --pattern "Frameshift-update.json" `
@@ -94,7 +94,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
           $tag = $env:RELEASE_TAG.Trim()
-          $json = gh release view $tag --json isDraft | ConvertFrom-Json
+          $json = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft | ConvertFrom-Json
           if (-not $json.isDraft) { throw "$tag is no longer a draft release." }
-          gh release edit $tag --draft=false
+          gh release edit $tag --repo $env:GITHUB_REPOSITORY --draft=false
           if ($LASTEXITCODE -ne 0) { throw "Could not publish verified release $tag." }

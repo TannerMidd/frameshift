@@ -147,5 +147,10 @@ assert "FRAMESHIFT_UPDATE_SIGNING_KEY" not in candidate_workflow
 assert "workflow_dispatch:" in publish_workflow
 assert "tools/verify_release_manifest.py" in publish_workflow
 assert "FRAMESHIFT_UPDATE_SIGNING_KEY" not in publish_workflow
+release_commands = [
+    line.strip() for line in publish_workflow.splitlines() if "gh release " in line
+]
+assert len(release_commands) == 4
+assert all("--repo $env:GITHUB_REPOSITORY" in line for line in release_commands)
 
 print("release signing tools OK: offline key, real signer/verifier, draft-only CI")
