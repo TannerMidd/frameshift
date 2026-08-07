@@ -1,56 +1,84 @@
-## Frameshift v2.10.0 — a window that gets out of the way
+## Frameshift v2.11.0 — trust the update, tame the background work
 
-Frameshift has always drawn a cockpit inside a stock Windows frame: grey title
-bar, blue close button, and the app's own black-and-orange starting an inch
-below it. Next to a full-screen game it read as exactly what it was, a browser
-window left open on the second monitor.
+This release is about the machinery that keeps Frameshift dependable while it
+runs beside the game: updates now have a real publisher identity, EDDN uploads
+cannot grow into an unbounded swarm of threads, simultaneous maintenance
+requests no longer race each other, and the browser UI is tested against the
+actual Python server rather than fixtures alone.
 
-The frame is gone. Frameshift draws its own now, and it can disappear entirely.
+There is no commander-data migration and no new account, subscription, API key,
+or paid service.
 
-### Fullscreen, properly
+### Publisher-authenticated automatic updates
 
-Press **F11**. The window covers the whole monitor, taskbar included, and takes
-the title bar with it. **Esc** brings it back.
+Frameshift now verifies an Ed25519 signature before it offers or installs a new
+version. The signed manifest binds the release version, both executable names,
+their exact sizes, and their SHA-256 digests. A missing manifest, altered
+signature, renamed executable, truncated download, or mismatched digest makes
+the updater fail closed.
 
-Panel mode has had a ⛶ FULL button for a while and inside the app it did
-nothing at all. It was asking the *page* to go fullscreen — something a browser
-can do and an embedded window cannot, because there is no browser window there
-to expand. The button clicked, and that was the end of it. It drives the real
-window now. Opened from a tablet it still does the browser version, which is the
-right answer on a tablet.
+The private release key stays off GitHub and outside the build workflow. A tag
+build creates an unpublished draft; its exact executables are signed with the
+owner-held key, and a separate public-key verification workflow publishes the
+draft only after both files pass. This gives the in-app updater independent
+publisher authentication without a commercial signing service.
 
-However you leave — F11, Esc, or backing out of Panel mode — the window returns
-to exactly where it was, still maximised if it was maximised before. The choice
-sticks, too: close Frameshift in fullscreen and it opens in fullscreen.
+This is deliberately not presented as Windows Authenticode. Windows or an
+antivirus product may still show a reputation warning for a newly downloaded
+executable, but Frameshift itself can now prove that an automatic update came
+from the project's release key.
 
-### A title bar in the same paint as everything else
+### Bounded EDDN contribution
 
-Thin and dark, with the accent diamond and FRAMESHIFT on the left, minimize,
-maximize and close on the right, all in the same holo styling as the rest of the
-app. It follows your Color theme — and so does the thin system border around the
-window, which is the one piece of it CSS cannot reach.
+Anonymous EDDN contribution previously started a fresh thread for every upload.
+A burst of journal events could therefore create an unbounded number of threads
+while the network was slow.
 
-Giving up the real frame means giving up everything Windows was quietly doing
-with it, so all of that had to be rebuilt: dragging the bar, double-clicking it
-to maximize, grabbing any edge or corner to resize, Aero Snap, and the Windows 11
-snap layouts that appear when you hover over the maximize button. Maximizing
-still stops at the taskbar. Fullscreen is the only thing that covers it.
+Uploads now use two reusable workers and a bounded 32-item waiting queue. The
+journal never blocks on community-network latency, duplicate observations are
+coalesced while pending, saturation is visible in diagnostics, and shutdown
+drains accepted work cleanly within a fixed timeout.
 
-The in-app browser windows — the ones Inara links open in — keep their ordinary
-Windows frame on purpose. Cockpit chrome wrapped around somebody else's website
-looks like a spoof.
+### Maintenance requests no longer race
 
-### More room on a large monitor
+Two simultaneous **Build Database** requests could both pass the old liveness
+check and start seed jobs against the same dump and staging database. The updater
+had the equivalent check-then-start window around its shared `.new.exe` path.
 
-The desktop layout was capped at 1100 pixels wide, which is sensible in a 1060
-pixel window and faintly ridiculous at 1440p. It now widens in two steps, at 1500
-and 2200 pixels of window width, out to about 2100. Those are the same tiers the
-Panel status page has been using. Tables get the extra room; nothing is stretched
-to fill it.
+Both lifecycles now reserve their operation atomically before starting any
+worker or network work. A duplicate request receives the existing
+already-running response instead of launching competing background jobs.
+
+### Tougher local API boundary
+
+- JSON endpoints consistently reject malformed JSON, `null`, arrays, and scalar
+  bodies with a JSON `400` instead of allowing route-specific `500` errors.
+- Numeric query parameters reject `NaN`, infinity, and malformed values before
+  they reach market or colonisation searches.
+- The single-instance probe now requires Frameshift product/version headers and
+  a recognizable state payload; an unrelated local HTTP service returning
+  `200 OK` is no longer mistaken for an existing Frameshift process.
+
+### A backend that is easier to change safely
+
+Twenty system and administration routes now live outside the main Flask app
+factory, and the completed-journal history rebuild is a dedicated collaborator
+instead of another 568 lines inside `JournalWatcher`. Automated architecture
+budgets prevent those composition points from quietly growing back past their
+new boundaries.
+
+The Python side now has pinned Ruff, mypy, and branch-coverage gates alongside
+the existing frontend checks. The browser suite also boots the native-ESM UI
+through a real temporary Flask server, covering the response headers, state
+contract, and visible commander/system boundary end to end.
 
 ### Upgrade notes
 
-- Update normally from any 2.x release. No database changes, no migration.
-- Fullscreen starts off and is remembered per install, alongside your other
-  settings in the `data` folder.
-- The new window chrome is Windows-only, which is where the released builds run.
+- Update normally from any 2.x release. No database rebuild or commander-data
+  migration is required.
+- Versions through v2.10.0 cannot know about the new publisher key, so the move
+  to v2.11.0 is the one-time bridge through the previous checksum-only updater.
+  Once v2.11.0 is installed, later automatic updates require the Ed25519
+  signature and fail closed without it.
+- Existing EDDN privacy and opt-in settings are unchanged.
+- The release remains fully usable and buildable without paid infrastructure.

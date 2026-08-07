@@ -24,6 +24,10 @@ class Seeder:
         self.reset()
 
     def reset(self):
+        with self._lock:
+            self._reset_unlocked()
+
+    def _reset_unlocked(self):
         self.phase = "idle"  # idle | downloading | importing | done | error
         self.error = None
         self.downloaded = 0
@@ -49,17 +53,30 @@ class Seeder:
             }
 
     def running(self):
+        with self._lock:
+            return self._running_unlocked()
+
+    def _running_unlocked(self):
         return self._thread is not None and self._thread.is_alive()
 
     def start(self, include_carriers=False, keep_dump=False):
-        if self.running():
-            return False
-        self.reset()
-        self._thread = threading.Thread(
-            target=self._run, args=(include_carriers, keep_dump), name="market-seeder", daemon=True
-        )
-        self._thread.start()
-        return True
+        # Keep the liveness check, state reset, worker publication, and start
+        # atomic. Flask may serve concurrent seed requests; without this lock,
+        # both callers can observe the old worker as stopped and launch jobs
+        # that share the same dump/build paths and progress counters.
+        with self._lock:
+            if self._running_unlocked():
+                return False
+            self._reset_unlocked()
+            worker = threading.Thread(
+                target=self._run,
+                args=(include_carriers, keep_dump),
+                name="market-seeder",
+                daemon=True,
+            )
+            self._thread = worker
+            worker.start()
+            return True
 
     # ---------- internals ----------
 

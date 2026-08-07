@@ -145,19 +145,20 @@ of the current source tree.
 
 ## Performance acceptance gate
 
-`tools/check_ui_performance_budget.mjs` enforces:
+`tools/check_ui_performance_budget.mjs` warns at the aggregate soft thresholds
+and fails at the hard caps:
 
-| Budget | Limit |
-|---|---:|
-| Production modules | 145 |
-| Production JavaScript | 768 KiB |
-| Stylesheets | 180 KiB |
-| HTML shell | 4 KiB |
-| Single production module | 24 KiB |
+| Budget | Soft warning | Hard cap |
+|---|---:|---:|
+| Production modules | 145 | 160 |
+| Production JavaScript | 800 KiB | 900 KiB |
+| Stylesheets | — | 180 KiB |
+| HTML shell | — | 4 KiB |
+| Single production module | — | 24 KiB |
 
 These budgets protect startup and recursive ESM fetch cost on LAN tablets and
-the desktop WebView. A feature that crosses a budget is reorganized or replaces
-equivalent code before release.
+the desktop WebView. Crossing a soft threshold calls for consolidation or
+replacement of equivalent code; crossing a hard cap blocks CI and release.
 
 ## Browser acceptance gate
 
@@ -219,8 +220,10 @@ After packaging, the workflow starts the executable in headless mode and runs
 - confirm `no-cache` on UI assets; and
 - confirm `no-store` on `/api/state`.
 
-Checksums and the retained alternate executable filename are produced only
-after the packaged smoke test succeeds.
+After the packaged smoke test succeeds, the tag workflow creates an unsigned
+draft candidate with both executable names and convenience checksums. The
+release remains unpublished until the owner uploads an offline Ed25519-signed
+manifest and the manual publish workflow verifies both executable digests.
 
 ## Completion criteria
 

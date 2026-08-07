@@ -1,0 +1,18 @@
+[run]
+branch = True
+source = elite
+parallel = True
+relative_files = True
+disable_warnings = no-data-collected
+omit =
+    elite/_vendor/*
+
+[report]
+fail_under = 60
+precision = 1
+show_missing = True
+skip_covered = True
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    if __name__ == .__main__.:

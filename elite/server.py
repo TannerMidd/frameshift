@@ -2,6 +2,7 @@
 
 import ipaddress
 import logging
+import math
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -13,12 +14,10 @@ from werkzeug.serving import make_server
 
 from . import alerts, biovalues, launcher, links, marketdb, routes, settings, shipexport, spansh, tts
 from ._version import VERSION
-from .eddn import LISTENER
 from .errors import UserFacingError
 from .network import pairing_urls as build_pairing_urls
 from .security import (ALL_SCOPES, COOKIE_NAME, RateLimiter, SecurityManager,
                        SecurityStoreError, is_loopback, normalize_scopes)
-from .seed import SEEDER
 
 UI_DIR = Path(__file__).resolve().parent.parent / "ui"
 DEFAULT_BODY_LIMIT = 64 * 1024
@@ -256,6 +255,45 @@ def error_response(exc, status, **extra):
     return jsonify({"error": message, **extra}), status
 
 
+class _APIInputError(Exception):
+    """Expected client-input failure rendered as a JSON 400 response."""
+
+
+def _json_object_body():
+    """Return the request JSON object, preserving an omitted body as empty.
+
+    Flask's ``silent=True`` parser returns ``None`` for malformed JSON, JSON
+    ``null``, and requests without a body.  The API has historically treated
+    an omitted body as ``{}``, but every body-consuming route expects mapping
+    semantics.  Keep the omission compatibility while rejecting malformed or
+    non-object payloads before a route can fail with ``AttributeError``.
+    """
+    body = request.get_json(silent=True)
+    if body is None and not request.get_data(cache=True):
+        return {}
+    if not isinstance(body, dict):
+        raise _APIInputError("Request body must be a valid JSON object.")
+    return body
+
+
+def _numeric_query_arg(name, default, cast=float):
+    """Parse one optional numeric query argument or raise a JSON API error."""
+    raw = request.args.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        value = cast(raw)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise _APIInputError(
+            f"Query parameter '{name}' must be a number."
+        ) from exc
+    if isinstance(value, float) and not math.isfinite(value):
+        raise _APIInputError(
+            f"Query parameter '{name}' must be a finite number."
+        )
+    return value
+
+
 def create_app(state, security_manager=None):
     app = Flask(__name__, static_folder=str(UI_DIR), static_url_path="")
     # Operations boards can be exchanged as a bounded local JSON document.
@@ -264,6 +302,10 @@ def create_app(state, security_manager=None):
     security = security_manager or SecurityManager(marketdb.DATA_DIR)
     limiter = RateLimiter()
     app.extensions["frameshift_security"] = security
+
+    @app.errorhandler(_APIInputError)
+    def _api_input_error(exc):
+        return jsonify({"error": str(exc)}), 400
 
     def commander_id():
         """Use only the identity currently established in the live snapshot.
@@ -280,11 +322,6 @@ def create_app(state, security_manager=None):
     def request_state_snapshot():
         """Return the one live-state image captured when this request began."""
         return g.frameshift_state_snapshot
-
-    def extension_history_uses_commander():
-        """Only history-backed extension tests consume commander-owned data."""
-        body = request.get_json(silent=True) or {}
-        return not isinstance(body.get("sample_event"), dict)
 
     def current_route_uses_commander():
         view = app.view_functions.get(request.endpoint or "")
@@ -458,6 +495,7 @@ def create_app(state, security_manager=None):
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
         response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+        response.headers.setdefault("X-Frameshift-Product", "Frameshift")
         response.headers.setdefault("X-Frameshift-Version", VERSION)
         response.headers.setdefault(
             "Content-Security-Policy",
@@ -510,7 +548,7 @@ def create_app(state, security_manager=None):
 
     @app.post("/api/security/pair")
     def api_security_pair():
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             result = security.pair(body.get("code"), body.get("device_name"),
                                    request.remote_addr)
@@ -534,7 +572,7 @@ def create_app(state, security_manager=None):
 
     @app.post("/api/security/pairing-code")
     def api_security_pairing_code():
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             scopes = normalize_scopes(body.get("scopes") or ALL_SCOPES)
             ttl = int(body.get("ttl_seconds") or 900)
@@ -562,7 +600,7 @@ def create_app(state, security_manager=None):
 
     @app.patch("/api/security/devices/<device_id>")
     def api_security_device_update(device_id):
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             device = security.update_device(
                 device_id,
@@ -638,7 +676,7 @@ def create_app(state, security_manager=None):
 
     @app.post("/api/profiles/assign-unattributed")
     def api_profiles_assign_unattributed():
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             result = marketdb.assign_unattributed_history(body.get("commander_id"))
         except UserFacingError as exc:
@@ -708,7 +746,7 @@ def create_app(state, security_manager=None):
     @commander_scoped
     def api_trade_route():
         snap = request_state_snapshot()
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
 
         def num(key, default, cast=float):
             try:
@@ -954,7 +992,7 @@ def create_app(state, security_manager=None):
     def api_engineering_pin():
         from elite import blueprints, wishlist
 
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         candidate, _changed = blueprints.normalize_wishlist([body])
         saved, _adopted = wishlist.load(commander_id())
         saved, _migrated = blueprints.normalize_wishlist(saved)
@@ -986,7 +1024,7 @@ def create_app(state, security_manager=None):
     def api_objectives_create():
         from .objectives import ObjectiveStore
 
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         allowed = {
             key: body.get(key) for key in (
                 "category", "priority", "system", "station", "body", "estimated_seconds",
@@ -1007,7 +1045,7 @@ def create_app(state, security_manager=None):
 
         try:
             objective = ObjectiveStore(commander_id()).update(
-                objective_id, **(request.get_json(silent=True) or {}))
+                objective_id, **_json_object_body())
         except (TypeError, ValueError) as exc:
             return error_response(exc, 400)
         if not objective:
@@ -1030,7 +1068,7 @@ def create_app(state, security_manager=None):
         from . import blueprints, wishlist
         from .objectives import ObjectiveEngine
 
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             minutes = max(5, min(24 * 60, int(
                 body.get("minutes") or body.get("time_budget_minutes") or 60)))
@@ -1118,7 +1156,7 @@ def create_app(state, security_manager=None):
     def api_operations_create():
         from .operations import OperationsBoard
 
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         action = body.get("action") or "create_board"
         ops = OperationsBoard(commander_id())
         try:
@@ -1160,7 +1198,7 @@ def create_app(state, security_manager=None):
 
         try:
             result = OperationsBoard(commander_id()).update(
-                kind, record_id, **(request.get_json(silent=True) or {}))
+                kind, record_id, **_json_object_body())
         except KeyError:
             return jsonify({"error": "Operations record not found."}), 404
         except (TypeError, ValueError) as exc:
@@ -1199,8 +1237,8 @@ def create_app(state, security_manager=None):
     def api_operations_import():
         from .operations import OperationsBoard
 
-        body = request.get_json(silent=True)
-        document = body.get("document") if isinstance(body, dict) and "document" in body else body
+        body = _json_object_body()
+        document = body.get("document") if "document" in body else body
         try:
             report = OperationsBoard(commander_id()).import_json(document)
         except (KeyError, TypeError, ValueError) as exc:
@@ -1210,7 +1248,7 @@ def create_app(state, security_manager=None):
     @app.post("/api/cargo-recovery")
     @commander_scoped
     def api_cargo_recovery():
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         snapshot = request_state_snapshot()
         try:
             result = routes.recover_cargo(
@@ -1261,7 +1299,7 @@ def create_app(state, security_manager=None):
     @commander_scoped
     def api_specialists_mining(action):
         workflows = _specialist_facade()
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         if action == "start":
             workflows.mining.start(context=body.get("context"), force=bool(body.get("force")))
         elif action == "end":
@@ -1274,7 +1312,7 @@ def create_app(state, security_manager=None):
     @commander_scoped
     def api_specialists_combat(action):
         workflows = _specialist_facade()
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         if action == "start":
             workflows.combat.start(force=bool(body.get("force")))
         elif action == "end":
@@ -1287,7 +1325,7 @@ def create_app(state, security_manager=None):
     @commander_scoped
     def api_specialists_carrier_config():
         workflows = _specialist_facade()
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             workflows.carrier.configure_upkeep(
                 body.get("weekly_upkeep_cr"), body.get("target_weeks", 8),
@@ -1301,7 +1339,7 @@ def create_app(state, security_manager=None):
     @commander_scoped
     def api_specialists_carrier_route():
         workflows = _specialist_facade()
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             workflows.carrier.plan_route(
                 body.get("legs") or [], tritium_per_jump_t=body.get("tritium_per_jump_t"),
@@ -1315,7 +1353,7 @@ def create_app(state, security_manager=None):
     @commander_scoped
     def api_specialists_carrier_inventory():
         workflows = _specialist_facade()
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             workflows.carrier.set_inventory(body.get("items") or {}, source="commander input")
         except (TypeError, ValueError) as exc:
@@ -1326,7 +1364,7 @@ def create_app(state, security_manager=None):
     @commander_scoped
     def api_specialists_exobiology_pin():
         workflows = _specialist_facade()
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             workflows.exobiology.add_pin(
                 body.get("label") or "Waypoint", kind=body.get("kind") or "waypoint",
@@ -1377,10 +1415,7 @@ def create_app(state, security_manager=None):
         if info["kind"] != "raw":
             return jsonify({"error": f"{info['name']} is a {info['kind']} material. "
                                      "Only raw materials are found on body surfaces."}), 400
-        try:
-            share = float(request.args.get("min_share") or 10)
-        except ValueError:
-            return jsonify({"error": "Minimum concentration must be a number."}), 400
+        share = _numeric_query_arg("min_share", 10.0)
         try:
             bodies = spansh.material_bodies(
                 ref, info["name"], min_share=max(0.0, min(100.0, share)),
@@ -1476,7 +1511,7 @@ def create_app(state, security_manager=None):
     @app.post("/api/tts/voice")
     def api_tts_voice():
         """Switch the callout voice (kicks off its download when needed)."""
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             tts.set_voice(body.get("voice") or "")
         except tts.TTSError as exc:
@@ -1486,7 +1521,7 @@ def create_app(state, security_manager=None):
     @app.post("/api/speak")
     def api_speak():
         """Synthesize a callout with the local neural voice (cached WAVs)."""
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             wav = tts.synthesize(body.get("text", ""))
         except tts.TTSError as exc:
@@ -1513,7 +1548,7 @@ def create_app(state, security_manager=None):
     @commander_scoped
     def api_riches():
         snap = request_state_snapshot()
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
 
         def num(key, default, cast=float):
             try:
@@ -1540,7 +1575,7 @@ def create_app(state, security_manager=None):
     @commander_scoped
     def api_neutron():
         snap = request_state_snapshot()
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         to_system = (body.get("to") or "").strip()
         if not to_system:
             return jsonify({"error": "No destination system given."}), 400
@@ -1618,7 +1653,7 @@ def create_app(state, security_manager=None):
         if not depot:
             return jsonify({"error": "Unknown construction depot."}), 404
         needed = [r for r in depot["resources"] if r["remaining"] > 0][:10]
-        radius = float(request.args.get("radius", 50))
+        radius = _numeric_query_arg("radius", 50.0)
 
         def lookup(res):
             try:
@@ -1651,7 +1686,7 @@ def create_app(state, security_manager=None):
     @app.post("/api/watch")
     @commander_scoped
     def api_watch():
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         try:
             watch = alerts.add_loop_watch(body.get("loop") or {}, commander_id())
         except (UserFacingError, ValueError) as exc:
@@ -1661,7 +1696,7 @@ def create_app(state, security_manager=None):
     @app.post("/api/watch/remove")
     @commander_scoped
     def api_watch_remove():
-        body = request.get_json(silent=True) or {}
+        body = _json_object_body()
         return jsonify({"ok": alerts.remove_watch(body.get("id", 0), commander_id())})
 
     @app.post("/api/alerts/clear")
@@ -1759,263 +1794,17 @@ def create_app(state, security_manager=None):
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
-    @app.get("/api/marketdb/status")
-    def api_marketdb_status():
-        conn = marketdb.connect()
-        try:
-            # Fresh counts while a build is running (they ARE the progress);
-            # the 5-minute cache otherwise — see marketdb.status.
-            info = marketdb.status(conn, max_age=10 if SEEDER.running() else 300)
-        finally:
-            conn.close()
-        from .eddn_upload import UPLOADER
+    from .system_routes import register_system_routes
 
-        info["seeding"] = SEEDER.progress()
-        info["eddn"] = LISTENER.stats()
-        info["eddn_upload"] = UPLOADER.stats()
-        resp = jsonify(info)
-        resp.headers["Cache-Control"] = "no-store"
-        return resp
-
-    @app.post("/api/marketdb/seed")
-    def api_marketdb_seed():
-        # Honor the carrier preference at build time too, so the toggle
-        # controls what the database *contains*, not just what queries show.
-        if not SEEDER.start(include_carriers=not settings.get("exclude_carriers", True)):
-            return jsonify({"error": "A database build is already running."}), 409
-        return jsonify({"ok": True})
-
-    @app.get("/api/update/check")
-    def api_update_check():
-        from .updater import UPDATER
-
-        force = request.args.get("force") == "1"
-        info = {k: v for k, v in UPDATER.check(force=force).items() if not k.startswith("_")}
-        resp = jsonify(info)
-        resp.headers["Cache-Control"] = "no-store"
-        return resp
-
-    @app.post("/api/update/apply")
-    def api_update_apply():
-        from .updater import UPDATER
-
-        ok, err = UPDATER.start_update()
-        if not ok:
-            return jsonify({"error": err}), 400
-        return jsonify({"ok": True})
-
-    @app.get("/api/update/status")
-    def api_update_status():
-        from .updater import UPDATER
-
-        resp = jsonify(UPDATER.progress())
-        resp.headers["Cache-Control"] = "no-store"
-        return resp
-
-    @app.get("/api/diagnostics/health")
-    def api_diagnostics_health():
-        from .diagnostics import health_snapshot
-
-        return jsonify(health_snapshot())
-
-    @app.post("/api/diagnostics/bundle")
-    def api_diagnostics_bundle():
-        from .diagnostics import create_bundle
-
-        try:
-            bundle = create_bundle()
-        except Exception as exc:
-            return error_response(exc, 500)
-        return send_file(
-            bundle,
-            mimetype="application/zip",
-            as_attachment=True,
-            download_name=bundle.name,
-            max_age=0,
-        )
-
-    @app.get("/api/extensions")
-    def api_extensions():
-        from .extensions import EXTENSIONS
-
-        return jsonify(EXTENSIONS.snapshot())
-
-    @app.post("/api/extensions/reload")
-    def api_extensions_reload():
-        from .extensions import EXTENSIONS
-
-        return jsonify(EXTENSIONS.reload())
-
-    @app.post("/api/extensions/<extension_id>/approve")
-    def api_extension_approve(extension_id):
-        from .extensions import EXTENSIONS, ExtensionError
-
-        try:
-            return jsonify(EXTENSIONS.approve_process(extension_id))
-        except ExtensionError as exc:
-            return error_response(exc, 400)
-
-    @app.post("/api/extensions/<extension_id>/revoke")
-    def api_extension_revoke(extension_id):
-        from .extensions import EXTENSIONS, ExtensionError
-
-        try:
-            return jsonify(EXTENSIONS.revoke_process(extension_id))
-        except ExtensionError as exc:
-            return error_response(exc, 400)
-
-    @app.get("/api/extensions/<extension_id>/manifest")
-    def api_extension_manifest(extension_id):
-        from .extensions import EXTENSIONS, ExtensionError
-
-        try:
-            return jsonify({"manifest": EXTENSIONS.read_manifest(extension_id)})
-        except ExtensionError as exc:
-            return error_response(exc, 404)
-
-    @app.post("/api/extensions/save")
-    def api_extension_save():
-        from .extensions import EXTENSIONS, ExtensionError
-
-        body = request.get_json(silent=True) or {}
-        try:
-            snapshot = EXTENSIONS.save_declarative(body.get("manifest"))
-        except ExtensionError as exc:
-            return error_response(exc, 400)
-        return jsonify(snapshot)
-
-    @app.delete("/api/extensions/<extension_id>")
-    def api_extension_delete(extension_id):
-        from .extensions import EXTENSIONS, ExtensionError
-
-        try:
-            return jsonify(EXTENSIONS.delete_pack(extension_id))
-        except ExtensionError as exc:
-            return error_response(exc, 400)
-
-    @app.post("/api/extensions/test")
-    @commander_scoped_when(extension_history_uses_commander)
-    def api_extension_test():
-        from .extensions import ExtensionError, dry_run_rules
-
-        body = request.get_json(silent=True) or {}
-        sample = body.get("sample_event")
-        if isinstance(sample, dict):
-            events = [{"event": sample, "timestamp": sample.get("timestamp")}]
-        else:
-            from .eventledger import EventLedger
-
-            events = EventLedger(commander_id()).query(
-                limit=1000, ascending=False
-            )
-        try:
-            return jsonify(dry_run_rules(body.get("manifest"), events))
-        except ExtensionError as exc:
-            return error_response(exc, 400)
-
-    @app.get("/api/settings")
-    def api_settings_get():
-        import sys
-
-        from . import journal
-        from ._version import VERSION
-
-        info = {
-            "version": VERSION,
-            "journal_dir": str(journal.find_journal_dir()),
-            "data_dir": str(marketdb.DATA_DIR),
-            "auto_update_supported": bool(getattr(sys, "frozen", False)) and sys.platform == "win32",
-        }
-        resp = jsonify({"settings": settings.all_settings(), "info": info})
-        resp.headers["Cache-Control"] = "no-store"
-        return resp
-
-    @app.post("/api/settings")
-    def api_settings_set():
-        body = request.get_json(silent=True) or {}
-        if "journal_dir" in body:
-            safe_path, reason = _journal_path(body.get("journal_dir"))
-            if reason:
-                return jsonify({"error": reason}), 400
-            body["journal_dir"] = safe_path
-        try:
-            saved = settings.update(body)
-        except settings.SettingsError as exc:
-            return error_response(exc, 500)
-        return jsonify({"settings": saved})
-
-    @app.get("/api/journal-dir/validate")
-    def api_journal_dir_validate():
-        """Live validation for the journal-folder setting. Empty path = show
-        what auto-detection (env var included) would resolve to.
-
-        The API is reachable from the whole LAN, so a typed path is only
-        probed when it lies inside a plausible journal location (user profile,
-        Saved Games, the auto-detected folder) — anything else is reported as
-        unchecked rather than touched, closing off arbitrary-path probing.
-        SAVE never depends on this check."""
-        from . import journal
-
-        raw = (request.args.get("path") or "").strip()
-        auto = not raw
-        if auto:
-            path = journal.find_journal_dir()
-            exists = path.is_dir()
-            files = len(journal.journal_files(path)) if exists else 0
-            resp = jsonify({"path": str(path), "auto": True, "exists": exists, "files": files})
-            resp.headers["Cache-Control"] = "no-store"
-            return resp
-
-        safe_path, reason = _journal_path(raw)
-        if reason:
-            resp = jsonify({"path": raw, "auto": False, "exists": None,
-                            "files": 0, "unchecked": True, "error": reason})
-            resp.status_code = 400
-            resp.headers["Cache-Control"] = "no-store"
-            return resp
-        path = Path(safe_path)
-        exists = path.is_dir()
-        files = len(journal.journal_files(path)) if exists else 0
-        resp = jsonify({"path": safe_path, "auto": False, "exists": exists,
-                        "files": files, "unchecked": False})
-        resp.headers["Cache-Control"] = "no-store"
-        return resp
-
-    @app.post("/api/plot")
-    def api_plot():
-        body = request.get_json(silent=True) or {}
-        system = (body.get("system") or "").strip()
-        if not system:
-            return jsonify({"error": "No system name given."}), 400
-        # Autoplot types into the live game window; if we positively know the
-        # game is down, say so instead of hunting for a window that isn't there.
-        # (None = not probed yet — let autoplot try and report what it finds.)
-        if state.game_running is False:
-            return jsonify({
-                "error": "The game is offline — press ▲ LAUNCH ELITE DANGEROUS first, then plot."
-            }), 409
-        # Imported lazily so an input-emulation problem can't take the server down.
-        from . import autoplot
-
-        try:
-            steps = autoplot.plot_route(
-                system,
-                dry_run=bool(body.get("dry_run", False)),
-                close_map=bool(body.get("close_map", True)),
-            )
-        except autoplot.AutoplotCancelled:
-            return jsonify({"cancelled": True, "system": system}), 200
-        except autoplot.AutoplotError as exc:
-            return error_response(exc, 409)
-        return jsonify({"ok": True, "system": system, "steps": steps})
-
-    @app.post("/api/plot/cancel")
-    def api_plot_cancel():
-        # Imported lazily so an input-emulation problem can't take the server down.
-        from . import autoplot
-
-        running = autoplot.cancel_plot()
-        return jsonify({"ok": True, "cancelling": bool(running)})
+    register_system_routes(
+        app,
+        state,
+        commander_id=commander_id,
+        commander_scoped_when=commander_scoped_when,
+        error_response=error_response,
+        journal_path=_journal_path,
+        json_object_body=_json_object_body,
+    )
 
     return app
 

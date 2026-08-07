@@ -172,11 +172,14 @@ def test_cleanup_order_and_fault_isolation():
             Component("journal"),
             Component("eddn"),
             Component("extensions"),
+            Component("uploader"),
         )
     finally:
         app.logging.shutdown = original_logging_shutdown
         app.logging.getLogger = original_get_logger
-    assert calls == ["http", "journal", "eddn", "extensions", "logging"], calls
+    assert calls == [
+        "http", "journal", "uploader", "eddn", "extensions", "logging",
+    ], calls
 
 
 def test_journal_watcher_shutdown():

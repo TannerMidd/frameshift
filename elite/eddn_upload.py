@@ -13,9 +13,11 @@ import hashlib
 import hmac
 import json
 import os
+import queue
 import re
 import secrets
 import threading
+import time
 from copy import deepcopy
 
 import requests
@@ -50,6 +52,8 @@ SCHEMAS = {
 }
 SOFTWARE_NAME = "Frameshift"
 MAX_AGE_S = 120  # never upload stale snapshots (e.g. bootstrap replays)
+UPLOAD_WORKERS = 2
+UPLOAD_QUEUE_SIZE = 32
 IDENTITY_PATH = marketdb.DATA_DIR / "eddn_identity.bin"
 _identity_lock = threading.Lock()
 _identity_secret = None
@@ -775,12 +779,32 @@ def _build_snapshot_message(schema_name, data, horizons, odyssey):
 
 
 class EddnUploader:
-    def __init__(self):
+    def __init__(self, *, worker_count=UPLOAD_WORKERS, queue_size=UPLOAD_QUEUE_SIZE):
+        if (
+            not isinstance(worker_count, int)
+            or isinstance(worker_count, bool)
+            or worker_count < 1
+        ):
+            raise ValueError("worker_count must be a positive integer")
+        if (
+            not isinstance(queue_size, int)
+            or isinstance(queue_size, bool)
+            or queue_size < 1
+        ):
+            raise ValueError("queue_size must be a positive integer")
         self._lock = threading.Lock()
+        self._idle = threading.Condition(self._lock)
         self._signal_lock = threading.Lock()
+        self._queue = queue.Queue(maxsize=queue_size)
+        self._worker_count = worker_count
+        self._workers = []
+        self._pending_keys = set()
+        self._active_jobs = 0
+        self._accepting = True
         self._last_key = None
         self._pending_signals = []
         self.uploads = 0
+        self.dropped = 0
         self.last_upload_at = None
         self.last_error = None
         self.by_schema = {}
@@ -792,10 +816,135 @@ class EddnUploader:
                 "market_enabled": enabled(),
                 "extended_enabled": extended_enabled(),
                 "uploads": self.uploads,
+                "queued": self._queue.qsize(),
+                "in_flight": self._active_jobs,
+                "dropped": self.dropped,
+                "accepting": self._accepting,
                 "last_upload_at": self.last_upload_at,
                 "last_error": self.last_error,
                 "by_schema": dict(self.by_schema),
             }
+
+    def _start_workers_locked(self):
+        live = [worker for worker in self._workers if worker.is_alive()]
+        self._workers = live
+        for index in range(len(live), self._worker_count):
+            worker = threading.Thread(
+                target=self._worker,
+                name=f"eddn-upload-{index + 1}",
+                daemon=True,
+            )
+            self._workers.append(worker)
+            worker.start()
+
+    def _enqueue(self, key, action, args):
+        """Queue one unique best-effort upload without blocking the journal.
+
+        A full queue deliberately drops the newest observation. The key is only
+        committed after a successful enqueue, so the same observation can be
+        retried later instead of being suppressed by backpressure.
+        """
+        with self._lock:
+            if not self._accepting:
+                return False
+            if key == self._last_key or key in self._pending_keys:
+                return False
+            try:
+                self._queue.put_nowait((key, action, args))
+            except queue.Full:
+                self.dropped += 1
+                self.last_error = "EDDN upload queue full; newest observation dropped"
+                return False
+            self._pending_keys.add(key)
+            self._last_key = key
+            self._start_workers_locked()
+            return True
+
+    def _worker(self):
+        while True:
+            try:
+                key, action, args = self._queue.get(timeout=0.1)
+            except queue.Empty:
+                with self._lock:
+                    if not self._accepting and self._queue.empty():
+                        return
+                continue
+
+            with self._lock:
+                self._active_jobs += 1
+            try:
+                action(*args)
+            except Exception as exc:
+                # A malformed response or future builder bug must not retire a
+                # worker and leave the bounded queue permanently undrained.
+                with self._lock:
+                    self.last_error = f"{type(exc).__name__}: {exc}"[:200]
+            finally:
+                with self._idle:
+                    self._active_jobs -= 1
+                    self._pending_keys.discard(key)
+                    self._idle.notify_all()
+                self._queue.task_done()
+
+    @staticmethod
+    def _remaining(deadline):
+        if deadline is None:
+            return None
+        return max(0.0, deadline - time.monotonic())
+
+    def drain(self, timeout=None):
+        """Wait until every accepted upload has completed.
+
+        Producers may continue to add work unless ``shutdown`` has first closed
+        the queue. The return value reports whether the queue became idle within
+        the optional timeout.
+        """
+        deadline = None if timeout is None else time.monotonic() + max(0.0, timeout)
+        with self._idle:
+            while self._pending_keys:
+                remaining = self._remaining(deadline)
+                if remaining is not None and remaining <= 0:
+                    return False
+                self._idle.wait(remaining)
+            return True
+
+    def _discard_queued(self):
+        discarded = 0
+        while True:
+            try:
+                key, _action, _args = self._queue.get_nowait()
+            except queue.Empty:
+                break
+            with self._idle:
+                self._pending_keys.discard(key)
+                self.dropped += 1
+                discarded += 1
+                self._idle.notify_all()
+            self._queue.task_done()
+        return discarded
+
+    def shutdown(self, *, wait=True, timeout=5, drain=True):
+        """Stop accepting work and, by default, drain the bounded queue.
+
+        The operation is idempotent. A false result means a worker is still
+        finishing an upload after the timeout; another call may wait for it.
+        ``drain=False`` discards queued (but never in-flight) observations.
+        """
+        deadline = None if timeout is None else time.monotonic() + max(0.0, timeout)
+        with self._lock:
+            self._accepting = False
+            workers = list(self._workers)
+        if not drain:
+            self._discard_queued()
+        if not wait:
+            return not any(worker.is_alive() for worker in workers)
+        if drain and not self.drain(self._remaining(deadline)):
+            return False
+        for worker in workers:
+            if worker is threading.current_thread():
+                continue
+            worker.join(self._remaining(deadline))
+        return not any(worker.is_alive() for worker in workers)
 
     @staticmethod
     def _header(commander, game_version=None, game_build=None):
@@ -978,21 +1127,12 @@ class EddnUploader:
         )
 
     def _queue_envelope(self, schema_name, message, commander, game_version, game_build, key):
-        with self._lock:
-            if key == self._last_key:
-                return
-            self._last_key = key
         envelope = {
             "$schemaRef": SCHEMAS[schema_name],
             "header": self._header(commander, game_version, game_build),
             "message": message,
         }
-        threading.Thread(
-            target=self._publish_envelope,
-            args=(schema_name, envelope),
-            name=f"eddn-upload-{schema_name}",
-            daemon=True,
-        ).start()
+        self._enqueue(key, self._publish_envelope, (schema_name, envelope))
 
     def maybe_publish(
         self, market, commander, game_version=None, game_build=None,
@@ -1015,16 +1155,11 @@ class EddnUploader:
         ):
             return
         key = (market_id, timestamp)
-        with self._lock:
-            if key == self._last_key:
-                return
-            self._last_key = key
-        threading.Thread(
-            target=self._publish,
-            args=(market, commander, game_version, game_build, horizons, odyssey),
-            name="eddn-upload",
-            daemon=True,
-        ).start()
+        self._enqueue(
+            key,
+            self._publish,
+            (deepcopy(market), commander, game_version, game_build, horizons, odyssey),
+        )
 
     def _publish(
         self, market, commander, game_version=None, game_build=None,

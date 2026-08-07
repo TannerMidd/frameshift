@@ -104,8 +104,15 @@ Detailed guides live in the wiki:
 The enforced frontend design is documented in
 [UI architecture](docs/UI_ARCHITECTURE.md), with the completed modernization
 record in [the implementation plan](docs/UI_ARCHITECTURE_PLAN.md). The
+[backend architecture](docs/BACKEND_ARCHITECTURE.md) documents Flask, journal,
+and database boundaries plus their enforced growth budgets. The
 [Engineering dossier](https://tannermidd.github.io/frameshift/architecture/)
 provides the broader system and release-pipeline overview.
+
+The project-wide [engineering policy](docs/ENGINEERING_POLICY.md) makes the
+zero-cost requirement permanent. Automatic-update authenticity uses the free
+[Ed25519 release-signing process](docs/RELEASE_SIGNING.md), with no paid
+certificate or signing service.
 
 ## Local-first data and security
 
@@ -119,8 +126,9 @@ provides the broader system and release-pipeline overview.
 - Anonymous market contribution to EDDN is enabled by default. Broader
   outfitting, navigation, exploration, Codex, and biological reporting is a
   separate opt-in in Settings.
-- Windows updates require a matching same-release SHA-256 checksum. This
-  detects damaged or truncated downloads but is not publisher code-signing.
+- Windows updates require an offline Ed25519 publisher signature that binds the
+  release version, executable name, size, and SHA-256 digest. Unsigned or
+  mismatched updates fail closed; no paid code-signing service is required.
 
 Frameshift works alongside EDMC, so you can keep EDMC running if you use it to
 sync services such as Inara or EDSM.

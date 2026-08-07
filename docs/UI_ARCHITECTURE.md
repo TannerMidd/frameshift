@@ -190,13 +190,18 @@ theme require visual review after layer or import-order changes.
 `npm run verify:frontend` runs syntax, architecture, dependency, DOM-contract,
 CSS, performance, formatting, lint, strict typecheck, and Vitest gates.
 
-The performance gate enforces:
+The performance gate uses soft thresholds for aggregate JavaScript growth and
+hard release caps:
 
-- no more than 145 production modules;
-- no more than 800 KiB of production JavaScript;
-- no more than 180 KiB of CSS;
-- no more than 4 KiB for `ui/index.html`; and
-- no production module larger than 24 KiB.
+- above 145 production modules, warn; above 160, fail;
+- above 800 KiB of production JavaScript, warn; above 900 KiB, fail;
+- fail above 180 KiB of CSS;
+- fail above 4 KiB for `ui/index.html`; and
+- fail when any production module exceeds 24 KiB.
+
+Soft-threshold warnings signal that a feature should consolidate or replace
+equivalent code, while preserving enough headroom for incremental work. The
+hard caps fail `npm run check:performance` and therefore block CI and release.
 
 Vitest owns importable unit and DOM behavior tests. Playwright owns real-browser
 journeys:
@@ -223,6 +228,11 @@ The packaged smoke test starts `Frameshift.exe` headlessly and runs
 graph, rejects bare or cross-origin module imports, checks one coherent
 `X-Frameshift-Version`, requires `no-cache` for UI assets, and requires
 `no-store` for `/api/state`.
+
+Passing artifacts are staged only as an unpublished draft. Final publication
+requires an owner-created offline Ed25519 manifest whose signature and both
+executable digests pass `tools/verify_release_manifest.py`; Actions never
+receives the private release key.
 
 Flask serves a self-only script CSP. UI assets revalidate with `no-cache`; APIs
 use `no-store`. The browser HTTP client reloads once when the server version

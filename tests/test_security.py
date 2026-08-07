@@ -61,6 +61,7 @@ with tempfile.TemporaryDirectory() as td:
     assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
     assert response.headers["Cache-Control"] == "no-store"
     assert response.headers["X-Frameshift-Version"]
+    assert response.headers["X-Frameshift-Product"] == "Frameshift"
     response = remote.get("/", headers=host, environ_base=remote_env)
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "no-cache"

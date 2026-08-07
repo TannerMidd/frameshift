@@ -1,0 +1,43 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["elite/_vendor"]
+
+[tool.ruff.lint]
+# Start with correctness rules that catch syntax errors, undefined names, and
+# invalid control flow without forcing a repository-wide style rewrite.
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.mypy]
+python_version = "3.12"
+files = [
+    "elite/__init__.py",
+    "elite/_version.py",
+    "elite/bindings.py",
+    "elite/commanderdb.py",
+    "elite/engineers.py",
+    "elite/errors.py",
+    "elite/exploration.py",
+    "elite/galaxywatch.py",
+    "elite/links.py",
+    "elite/qrcode.py",
+    "elite/security.py",
+    "elite/settings.py",
+    "elite/shipexport.py",
+    "elite/specialists.py",
+    "elite/update_trust.py",
+    "elite/wishlist.py",
+    "tools/generate_update_signing_key.py",
+    "tools/run_python_test_file.py",
+    "tools/sign_release_manifest.py",
+    "tools/verify_served_ui.py",
+]
+check_untyped_defs = true
+follow_imports = "skip"
+ignore_missing_imports = true
+no_implicit_optional = true
+show_error_codes = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_ignores = true

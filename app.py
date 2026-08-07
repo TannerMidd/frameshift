@@ -5,6 +5,7 @@ Run `python app.py --headless` for server-only mode (view from any browser).
 """
 
 import argparse
+import json
 import logging
 import os
 import signal
@@ -34,7 +35,19 @@ def instance_already_running(port):
     let two servers coexist and fight over requests — the zombie-process trap)."""
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/state", timeout=1.5) as r:
-            return r.status == 200
+            if r.status != 200:
+                return False
+            if r.headers.get("X-Frameshift-Product") != "Frameshift":
+                return False
+            if not r.headers.get("X-Frameshift-Version"):
+                return False
+            raw = r.read(64 * 1024 + 1)
+            if len(raw) > 64 * 1024:
+                return False
+            payload = json.loads(raw.decode("utf-8"))
+            return isinstance(payload, dict) and {
+                "journal_rebuild", "galaxy_mode",
+            }.issubset(payload)
     except Exception:
         return False
 
@@ -190,18 +203,24 @@ def _remember_fullscreen(on):
         logging.getLogger(__name__).debug("could not remember fullscreen", exc_info=True)
 
 
-def _shutdown_runtime(server=None, watcher=None, listener=None, extensions=None):
+def _shutdown_runtime(
+    server=None, watcher=None, listener=None, extensions=None, uploader=None,
+):
     """Release background resources in dependency order.
 
-    The HTTP listener closes first so no new work can arrive while the EDDN
-    database connection and optional extension workers are being drained.
-    Logging closes last, after every component had a chance to report a fault.
+    The HTTP listener closes first. The journal producer then stops before its
+    bounded EDDN upload queue is drained; the inbound EDDN database listener
+    and optional extension workers follow. Logging closes last, after every
+    component had a chance to report a fault.
     """
     logger = logging.getLogger(__name__)
     logger.info("Frameshift shutdown started")
     cleanup = (
         ("HTTP server", getattr(server, "shutdown", None), {}),
         ("journal watcher", getattr(watcher, "stop", None), {"timeout": 5}),
+        ("EDDN uploader", getattr(uploader, "shutdown", None), {
+            "wait": True, "timeout": 5, "drain": True,
+        }),
         ("EDDN listener", getattr(listener, "stop", None), {"timeout": 5}),
         ("extension host", getattr(extensions, "shutdown", None), {"wait": True}),
     )
@@ -211,7 +230,8 @@ def _shutdown_runtime(server=None, watcher=None, listener=None, extensions=None)
                 continue
             try:
                 result = action(**kwargs)
-                if name in {"journal watcher", "EDDN listener"} and result is False:
+                if name in {"journal watcher", "EDDN uploader", "EDDN listener"} \
+                        and result is False:
                     logger.warning("%s did not stop within the shutdown timeout", name)
                 else:
                     logger.info("Stopped %s", name)
@@ -296,6 +316,7 @@ def main():
     server = None
     watcher = None
     listener = None
+    uploader = None
     try:
         state = AppState()
         watcher = JournalWatcher(state)
@@ -303,6 +324,9 @@ def main():
 
         from elite import galaxywatch
         from elite.eddn import LISTENER
+        from elite.eddn_upload import UPLOADER as EDDN_UPLOADER
+
+        uploader = EDDN_UPLOADER
 
         # The EDDN feed carries every commander's travel, so a watched system
         # name can surface there long before it reaches this commander's own
@@ -338,7 +362,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        _shutdown_runtime(server, watcher, listener, EXTENSIONS)
+        _shutdown_runtime(server, watcher, listener, EXTENSIONS, uploader)
 
 
 if __name__ == "__main__":

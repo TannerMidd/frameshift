@@ -33,6 +33,15 @@ from urllib.parse import urlsplit
 
 import requests
 
+from .update_trust import (
+    MANIFEST_NAME,
+    MAX_MANIFEST_BYTES,
+    MAX_SIGNATURE_BYTES,
+    SIGNATURE_NAME,
+    UpdateSignatureError,
+    verify_release_manifest,
+)
+
 try:
     from ._version import VERSION
 except Exception:  # pragma: no cover - _version is always present in practice
@@ -47,7 +56,6 @@ CHECK_TIMEOUT = 15
 DOWNLOAD_TIMEOUT = 60
 MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
 HEALTH_CONFIRM_SECONDS = 60
-_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 # The rollback copy is deliberately NOT an .exe. Through v2.9.0 it was written
 # as "<stem>.old.exe": an unsigned program dropping a byte-identical copy of
 # itself next to itself, which is also a fair description of self-replication.
@@ -65,7 +73,6 @@ _logger = logging.getLogger(__name__)
 _DOWNLOAD_HOSTS = {
     "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com",
 }
-_CHECKSUM_HOSTS = _DOWNLOAD_HOSTS
 _API_HOSTS = {"api.github.com"}
 
 
@@ -305,10 +312,7 @@ class Updater:
             "notes_title": None,
             "size": None,
             "supported": is_supported(),
-            # The digest is delivered beside the executable by the same GitHub
-            # release. It detects corruption/truncation; it is not an
-            # independent publisher signature.
-            "verification": "SHA-256 integrity (same release channel)",
+            "verification": "Ed25519 publisher signature + SHA-256 integrity",
             "error": None,
         }
         try:
@@ -321,10 +325,17 @@ class Updater:
                 result["error"] = f"GitHub returned {resp.status_code}"
             else:
                 data = resp.json()
+                if not isinstance(data, dict):
+                    raise RuntimeError("release metadata is malformed")
                 tag = data.get("tag_name") or ""
+                if not isinstance(tag, str):
+                    raise RuntimeError("release version metadata is malformed")
                 assets = data.get("assets") or []
+                if not isinstance(assets, list):
+                    raise RuntimeError("release asset metadata is malformed")
                 asset = next((a for name in ASSET_NAMES
-                              for a in assets if a.get("name") == name), None)
+                              for a in assets
+                              if isinstance(a, dict) and a.get("name") == name), None)
                 result["latest"] = tag.lstrip("vV") or None
                 result["notes_url"] = data.get("html_url") or result["notes_url"]
                 result["notes"] = data.get("body") or None
@@ -334,9 +345,20 @@ class Updater:
                     result["_download_url"] = asset.get("browser_download_url")
                     result["_asset_name"] = asset.get("name")
                     result["_assets"] = assets
-                result["available"] = bool(asset) and \
-                    parse_version(tag) > parse_version(VERSION)
-        except (requests.RequestException, RuntimeError) as exc:
+                newer = bool(asset) and parse_version(tag) > parse_version(VERSION)
+                if newer:
+                    try:
+                        # Authenticity is established before the UI offers an
+                        # install. GitHub transports these files, but only the
+                        # offline publisher key can authorize their contents.
+                        self._signed_release_entry(result)
+                    except (RuntimeError, UpdateSignatureError) as exc:
+                        result["error"] = (
+                            "Latest release signature could not be verified: " + str(exc)
+                        )
+                    else:
+                        result["available"] = True
+        except (requests.RequestException, RuntimeError, TypeError, ValueError) as exc:
             # Only the exception class name: check() results end up in API
             # responses, and full requests error text carries internal detail.
             result["error"] = f"Could not reach GitHub ({type(exc).__name__})"
@@ -353,31 +375,67 @@ class Updater:
     # ---------- update flow ----------
 
     def running(self):
-        return self._thread is not None and self._thread.is_alive()
+        with self._lock:
+            worker_alive = self._thread is not None and self._thread.is_alive()
+            return worker_alive or self.phase in {
+                "checking", "downloading", "verifying", "restarting",
+            }
 
     def start_update(self):
         """Kick off download + verify + restart in the background. Returns
         (ok, error)."""
         if not is_supported():
             return False, "Auto-update is only available in the packaged Windows app."
-        if self.running():
-            return False, "An update is already in progress."
-        info = self.check(force=True)
+        # Reserve the operation before performing the network check. Without
+        # this lock-protected state transition, two requests can both pass the
+        # old running() check and start workers that share the same staging path.
+        with self._lock:
+            worker_alive = self._thread is not None and self._thread.is_alive()
+            if worker_alive or self.phase in {
+                "checking", "downloading", "verifying", "restarting",
+            }:
+                return False, "An update is already in progress."
+            self.phase = "checking"
+            self.error = None
+            self.downloaded = 0
+            self.total = 0
+        try:
+            info = self.check(force=True)
+        except Exception as exc:
+            # The reservation must never survive a malformed/unexpected
+            # metadata failure, or every later request looks permanently busy.
+            _logger.warning("Update check failed: %s", type(exc).__name__)
+            error = f"Could not check for updates ({type(exc).__name__})."
+            self._set(phase="error", error=error)
+            return False, error
         if info.get("error"):
+            self._set(phase="error", error=info["error"])
             return False, info["error"]
         if not info.get("available"):
+            self._set(phase="idle")
             return False, "You're already on the latest version."
         if not info.get("_download_url"):
+            self._set(phase="error", error="The latest release has no downloadable exe.")
             return False, "The latest release has no downloadable exe."
+
+        worker = threading.Thread(
+            target=self._run, args=(info,), name="updater", daemon=True
+        )
         with self._lock:
             self.phase = "downloading"
             self.error = None
             self.downloaded = 0
             self.total = info.get("size") or 0
-        self._thread = threading.Thread(
-            target=self._run, args=(info,), name="updater", daemon=True
-        )
-        self._thread.start()
+            self._thread = worker
+            try:
+                # Publish and start while still holding the reservation lock so
+                # no caller can observe an unstarted, reusable operation slot.
+                worker.start()
+            except Exception as exc:
+                self._thread = None
+                self.phase = "error"
+                self.error = f"Could not start the updater ({type(exc).__name__})."
+                return False, self.error
         return True, None
 
     def progress(self):
@@ -434,7 +492,10 @@ class Updater:
             ) as r:
                 _require_final_url(r, _DOWNLOAD_HOSTS, "release download")
                 r.raise_for_status()
-                total = int(r.headers.get("Content-Length") or 0)
+                try:
+                    total = int(r.headers.get("Content-Length") or 0)
+                except (TypeError, ValueError) as exc:
+                    raise RuntimeError("release download size is malformed") from exc
                 if total < 0 or total > MAX_DOWNLOAD_BYTES:
                     raise RuntimeError("release download is unexpectedly large")
                 if total:
@@ -468,38 +529,86 @@ class Updater:
         with open(path, "rb") as f:
             if f.read(2) != b"MZ":
                 raise RuntimeError("downloaded file is not a Windows executable")
-        # Checksums are mandatory. A missing or unreachable digest is not an
-        # excuse to install unverifiable executable code.
-        expected = self._expected_sha256(info)
+        # The digest is accepted only from the publisher-signed manifest. A
+        # missing/unreachable signature is never an excuse to install code.
+        signed = self._signed_release_entry(info)
+        if size != signed["size"]:
+            raise RuntimeError(
+                f"signed download size mismatch ({size} != {signed['size']})"
+            )
         h = hashlib.sha256()
         with open(path, "rb") as f:
             for block in iter(lambda: f.read(1 << 20), b""):
                 h.update(block)
-        if h.hexdigest().lower() != expected.lower():
+        if h.hexdigest().lower() != signed["sha256"].lower():
             raise RuntimeError("checksum mismatch — refusing to install")
 
-    def _expected_sha256(self, info):
-        want = (info.get("_asset_name") or ASSET_NAMES[0]) + ".sha256"
-        asset = next((a for a in info.get("_assets") or []
-                      if a.get("name") == want), None)
+    def _read_release_asset(self, info, name, maximum, label):
+        asset = next(
+            (item for item in info.get("_assets") or []
+             if isinstance(item, dict) and item.get("name") == name),
+            None,
+        )
         if not asset:
-            raise RuntimeError("release checksum is missing — refusing to install")
+            raise RuntimeError(f"{label} is missing — refusing to install")
         url = asset.get("browser_download_url")
-        if not _trusted_https(url, _CHECKSUM_HOSTS):
-            raise RuntimeError("release checksum URL is not trusted")
+        if not _trusted_https(url, _DOWNLOAD_HOSTS):
+            raise RuntimeError(f"{label} URL is not trusted")
         try:
-            resp = requests.get(
-                url, headers=HEADERS, timeout=CHECK_TIMEOUT,
+            with requests.get(
+                url,
+                headers=HEADERS,
+                stream=True,
+                timeout=CHECK_TIMEOUT,
                 allow_redirects=True,
-            )
-            _require_final_url(resp, _CHECKSUM_HOSTS, "release checksum")
-            resp.raise_for_status()
+            ) as response:
+                _require_final_url(response, _DOWNLOAD_HOSTS, label)
+                response.raise_for_status()
+                try:
+                    declared = int(response.headers.get("Content-Length") or 0)
+                except (TypeError, ValueError) as exc:
+                    raise RuntimeError(f"{label} size is malformed") from exc
+                if declared < 0 or declared > maximum:
+                    raise RuntimeError(f"{label} is unexpectedly large")
+                chunks = []
+                received = 0
+                for chunk in response.iter_content(chunk_size=16 * 1024):
+                    if not chunk:
+                        continue
+                    received += len(chunk)
+                    if received > maximum:
+                        raise RuntimeError(f"{label} exceeded the safety limit")
+                    chunks.append(chunk)
+                if declared and received != declared:
+                    raise RuntimeError(f"{label} was truncated")
+                return b"".join(chunks)
         except (requests.RequestException, RuntimeError) as exc:
-            raise RuntimeError("release checksum could not be downloaded — refusing to install") from exc
-        token = (resp.text or "").strip().split()[0] if (resp.text or "").strip() else ""
-        if not _SHA256_RE.fullmatch(token):
-            raise RuntimeError("release checksum is malformed — refusing to install")
-        return token.lower()
+            raise RuntimeError(f"{label} could not be downloaded — refusing to install") from exc
+
+    def _signed_release_entry(self, info):
+        cached = info.get("_signed_asset")
+        if isinstance(cached, dict):
+            return cached
+
+        manifest = self._read_release_asset(
+            info, MANIFEST_NAME, MAX_MANIFEST_BYTES, "release manifest"
+        )
+        signature = self._read_release_asset(
+            info, SIGNATURE_NAME, MAX_SIGNATURE_BYTES, "release signature"
+        )
+        entry = verify_release_manifest(
+            manifest,
+            signature,
+            expected_version=info.get("latest") or "",
+            asset_name=info.get("_asset_name") or ASSET_NAMES[0],
+        )
+        metadata_size = info.get("size")
+        if metadata_size and metadata_size != entry["size"]:
+            raise UpdateSignatureError(
+                "signed executable size does not match the GitHub release metadata"
+            )
+        info["_signed_asset"] = entry
+        return entry
 
     def _stage_and_restart(self, new_path):
         """Write a helper batch that swaps in the new exe and relaunches, then

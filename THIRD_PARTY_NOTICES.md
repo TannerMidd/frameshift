@@ -1,5 +1,13 @@
 # Third-party notices
 
+## cryptography
+
+Frameshift bundles the open-source
+[cryptography](https://github.com/pyca/cryptography) package to verify the
+Ed25519 signature on update manifests. It is licensed under the Apache License
+2.0 or the BSD 3-Clause License. No paid signing or verification service is
+required.
+
 ## Piper TTS (downloaded on demand)
 
 Frameshift's optional neural voice callouts download the standalone
